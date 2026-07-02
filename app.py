@@ -29,24 +29,20 @@ class Analyzer:
         self.log = log
         self.progress = progress
         self.finish = finish
-        self.should_abort = False
+        self.aborted = False
         self.thread = threading.Thread(target=self.run)
         self.thread.start()
-
-    def abort(self) -> None:
-        """Abort analysis."""
-        self.should_abort = True
 
     def run(self) -> None:
         """Execute analysis."""
         try:
             progress = 0
-            while not self.should_abort and progress < 100:
+            while not self.aborted and progress < 100:
                 time.sleep(0.5)
                 progress += 1
                 self.progress(progress)
                 self.log(f"Progress {progress}")
-            if self.should_abort:
+            if self.aborted:
                 self.log("Aborted")
             else:
                 self.log("Done")
@@ -493,13 +489,8 @@ class MainFrame(wx.Frame):
         self.confirm_textarea = wx.TextCtrl(
             panel, wx.ID_ANY, "",
             style=(wx.TE_MULTILINE | wx.TE_READONLY | wx.HSCROLL | wx.VSCROLL |
-                   wx.TE_DONTWRAP)
+                   wx.TE_DONTWRAP | wx.BORDER_SIMPLE)
         )
-
-        def focus_handler(_evt):
-            self.confirm_textarea.Navigate()
-
-        self.confirm_textarea.Bind(wx.EVT_SET_FOCUS, focus_handler)
         panel_sizer.Add(self.confirm_textarea, 1,
                         wx.EXPAND | wx.LEFT | wx.RIGHT, self.FromDIP(10))
         panel.SetSizer(panel_sizer)
@@ -521,13 +512,8 @@ class MainFrame(wx.Frame):
         self.log_textarea = wx.TextCtrl(
             panel, wx.ID_ANY, "",
             style=(wx.TE_MULTILINE | wx.TE_READONLY | wx.HSCROLL | wx.VSCROLL |
-                   wx.TE_DONTWRAP)
+                   wx.TE_DONTWRAP | wx.BORDER_SIMPLE)
         )
-
-        def focus_handler(_evt):
-            self.log_textarea.Navigate()
-
-        self.log_textarea.Bind(wx.EVT_SET_FOCUS, focus_handler)
         panel_sizer.Add(self.log_textarea, 1,
                         wx.EXPAND | wx.LEFT | wx.RIGHT, self.FromDIP(10))
         panel.SetSizer(panel_sizer)
@@ -617,10 +603,13 @@ class MainFrame(wx.Frame):
         if self.analyzer is None:
             return
         self.analyzer.thread.join()
+        aborted = self.analyzer.aborted
         self.cancel_btn.Disable()
         self.next_btn.Enable()
         self.analyzer = None
         self.title_label.SetLabelText("Analysis complete")
+        if not aborted:
+            wx.Bell()
 
     def update_progress(self, progress: int) -> None:
         """Update analysis progress."""
@@ -644,7 +633,8 @@ class MainFrame(wx.Frame):
             self.next_btn.SetLabel("&Next >")
         self.title_label.SetLabelText(self.titles[self.current_page_idx])
         self.update_layout()
-        self.current_page.SetFocus()
+        if self.current_page_idx < 4:
+            self.current_page.SetFocus()
 
     def update_layout(self) -> None:
         """Update window layout."""
@@ -677,7 +667,7 @@ class MainFrame(wx.Frame):
             return
         if self.analyzer is not None:
             self.cancel_btn.Disable()
-            self.analyzer.abort()
+            self.analyzer.aborted = True
             return
         self.Close()
 
