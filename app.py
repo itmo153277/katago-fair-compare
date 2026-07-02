@@ -3,11 +3,13 @@
 
 """App."""
 
-from typing import Tuple, List
+from typing import Tuple, List, Callable
 import platform
 import sys
 import os
 import json
+import threading
+import time
 import wx
 from sgfmill import sgf, sgf_moves, boards as sgf_board
 
@@ -15,6 +17,44 @@ DATA_DIR = os.path.abspath(os.path.join(
     os.path.dirname(__file__),
     "resources"
 ))
+
+
+class Analyzer:
+    """Analyzer class."""
+
+    def __init__(self, log: Callable[[str], None],
+                 progress: Callable[[int], None],
+                 finish: Callable[[], None]) -> None:
+        """Construct analyzer."""
+        self.log = log
+        self.progress = progress
+        self.finish = finish
+        self.should_abort = False
+        self.thread = threading.Thread(target=self.run)
+        self.thread.start()
+
+    def abort(self) -> None:
+        """Abort analysis."""
+        self.should_abort = True
+
+    def run(self) -> None:
+        """Execute analysis."""
+        try:
+            progress = 0
+            while not self.should_abort and progress < 100:
+                time.sleep(0.5)
+                progress += 1
+                self.progress(progress)
+                self.log(f"Progress {progress}")
+            if self.should_abort:
+                self.log("Aborted")
+            else:
+                self.log("Done")
+        except Exception as e:
+            self.log(f"Error: {e}")
+            raise
+        finally:
+            self.finish()
 
 
 class Board(wx.Control):
@@ -212,6 +252,7 @@ class MainFrame(wx.Frame):
         self.sel_move_idx = 0
         self.first_to_move = "b"
         self.sel_moves = []
+        self.analyzer = None
         self.config: wx.ConfigBase = \
             wx.Config(wx.GetApp().GetAppName())  # type: ignore
 
@@ -246,19 +287,22 @@ class MainFrame(wx.Frame):
             self.create_page_2(),
             self.create_page_3(),
             self.create_page_4(),
+            self.create_page_5(),
         ]
         self.titles = [
             "Select SGF file",
             "Select position",
             "Select moves",
             "Analysis settings",
-            "Confirm Settings"
+            "Confirm Settings",
+            "Analyzing",
         ]
         self.page_loaders = [
             self.load_page_1,
             self.load_page_2,
             self.load_page_3,
-            self.load_page_4
+            self.load_page_4,
+            self.load_page_5,
         ]
         self.current_page = self.pages[0]
         self.current_page_idx = 0
@@ -287,6 +331,7 @@ class MainFrame(wx.Frame):
         self.Bind(wx.EVT_BUTTON, self.on_back_click, self.back_btn)
         self.Bind(wx.EVT_BUTTON, self.on_next_click, self.next_btn)
         self.Bind(wx.EVT_BUTTON, self.on_cancel_click, self.cancel_btn)
+        self.Bind(wx.EVT_CLOSE, self.on_close)
 
         self.main_panel.SetSizer(content_sizer)
         self.SetSize(self.FromDIP(wx.Size(800, 800)))
@@ -430,7 +475,7 @@ class MainFrame(wx.Frame):
         content_sizer.Add(label, 0,
                           wx.EXPAND | wx.ALL, self.FromDIP(5))
         self.model_selector = wx.FilePickerCtrl(
-            panel, wx.ID_ANY, model_path,
+            panel, wx.ID_ANY, "",
             message="Select KataGo model",
             wildcard=("KataGo model (*.bin.gz;*.bin)|*.bin.gz;*.bin|" +
                       "All files|*.*"),
@@ -456,6 +501,31 @@ class MainFrame(wx.Frame):
 
         self.confirm_textarea.Bind(wx.EVT_SET_FOCUS, focus_handler)
         panel_sizer.Add(self.confirm_textarea, 1,
+                        wx.EXPAND | wx.LEFT | wx.RIGHT, self.FromDIP(10))
+        panel.SetSizer(panel_sizer)
+        return panel
+
+    def create_page_5(self) -> wx.Panel:
+        """Create page 4 panel."""
+        panel = wx.Panel(self.main_panel, wx.ID_ANY)
+        panel_sizer = wx.BoxSizer(wx.VERTICAL)
+
+        self.progress_bar = wx.Gauge(panel, wx.ID_ANY)
+        panel_sizer.Add(self.progress_bar, 0,
+                        wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM,
+                        self.FromDIP(10))
+
+        self.log_textarea = wx.TextCtrl(
+            panel, wx.ID_ANY, "",
+            style=(wx.TE_MULTILINE | wx.TE_READONLY | wx.HSCROLL | wx.VSCROLL |
+                   wx.TE_DONTWRAP)
+        )
+
+        def focus_handler(_evt):
+            self.log_textarea.Navigate()
+
+        self.log_textarea.Bind(wx.EVT_SET_FOCUS, focus_handler)
+        panel_sizer.Add(self.log_textarea, 1,
                         wx.EXPAND | wx.LEFT | wx.RIGHT, self.FromDIP(10))
         panel.SetSizer(panel_sizer)
         return panel
@@ -525,12 +595,43 @@ class MainFrame(wx.Frame):
         self.confirm_textarea.Value = confirm_text
         return True
 
+    def load_page_5(self) -> bool:
+        """Load page 5."""
+        self.analyzer = Analyzer(
+            log=lambda msg: wx.CallAfter(self.analyzer_log, msg),
+            progress=lambda progress: wx.CallAfter(
+                self.update_progress, progress),
+            finish=lambda: wx.CallAfter(self.finish_analysis)
+        )
+        return True
+
+    def analyzer_log(self, msg: str) -> None:
+        """Log message from analyzer."""
+        self.log_textarea.AppendText(msg + "\n")
+
+    def finish_analysis(self) -> None:
+        """Finish analysis."""
+        if self.analyzer is None:
+            return
+        self.analyzer.thread.join()
+        self.cancel_btn.Disable()
+        self.next_btn.Enable()
+        self.analyzer = None
+
+    def update_progress(self, progress: int) -> None:
+        """Update analysis progress."""
+        self.progress_bar.Value = progress
+
     def update_page(self) -> None:
         """Update page."""
         self.current_page.Hide()
         self.current_page = self.pages[self.current_page_idx]
         self.current_page.Show()
-        self.back_btn.Enable(self.current_page_idx != 0)
+        if self.current_page_idx == 5:
+            self.back_btn.Disable()
+            self.next_btn.Disable()
+        else:
+            self.back_btn.Enable(self.current_page_idx != 0)
         if self.current_page_idx == 4:
             self.next_btn.SetLabel("&Start")
         elif self.current_page_idx == len(self.pages) - 1:
@@ -569,6 +670,10 @@ class MainFrame(wx.Frame):
         """Handle cancel button."""
         if wx.MessageBox("Are you sure you want to cancel?", "Cancel",
                          wx.YES_NO | wx.ICON_INFORMATION, self) != wx.YES:
+            return
+        if self.analyzer is not None:
+            self.cancel_btn.Disable()
+            self.analyzer.abort()
             return
         self.Close()
 
@@ -625,6 +730,15 @@ class MainFrame(wx.Frame):
         else:
             self.sel_moves.append((sel_x, sel_y))
         self.update_sel_board()
+
+    def on_close(self, event: wx.CloseEvent) -> None:
+        """Handle window close."""
+        if self.analyzer is None:
+            event.Skip()
+        elif event.CanVeto():
+            event.Veto()
+        else:
+            event.Skip()
 
     def calc_board(self) -> Tuple[sgf_board.Board, str, List[Tuple[int, int]]]:
         """Calculate board."""
