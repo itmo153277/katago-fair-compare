@@ -7,6 +7,7 @@ from typing import Tuple, List
 import platform
 import sys
 import os
+import json
 import wx
 from sgfmill import sgf, sgf_moves, boards as sgf_board
 
@@ -211,6 +212,8 @@ class MainFrame(wx.Frame):
         self.sel_move_idx = 0
         self.first_to_move = "b"
         self.sel_moves = []
+        self.config: wx.ConfigBase = \
+            wx.Config(wx.GetApp().GetAppName())  # type: ignore
 
         if getattr(sys, "frozen", False) and platform.system() == "Windows":
             self.SetIcon(wx.Icon(sys.executable, wx.BITMAP_TYPE_ICO))
@@ -373,6 +376,24 @@ class MainFrame(wx.Frame):
 
     def create_page_3(self) -> wx.Panel:
         """Create page 3 panel."""
+        katago_path = self.config.Read("EnginePath")
+        config_path = self.config.Read("ConfigPath")
+        model_path = self.config.Read("ModelPath")
+
+        if not katago_path or not config_path or not model_path:
+            katrain_conf_path = os.path.join(
+                wx.GetUserHome(), ".katrain", "config.json")
+            if os.path.exists(katrain_conf_path):
+                with open(katrain_conf_path, "rt", encoding="utf-8") as f:
+                    katrain_conf = json.load(f)
+                engine_conf = katrain_conf.get("engine", {})
+                if not katago_path:
+                    katago_path = engine_conf.get("katago", "")
+                if not config_path:
+                    config_path = engine_conf.get("config", "")
+                if not model_path:
+                    model_path = engine_conf.get("model", "")
+
         panel = wx.ScrolledWindow(self.main_panel, wx.ID_ANY)
         panel.SetScrollRate(0, self.FromDIP(10))
         panel_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -391,6 +412,7 @@ class MainFrame(wx.Frame):
             message="Select KataGo executable",
             wildcard=exe_wildcard,
             style=wx.FLP_USE_TEXTCTRL | wx.FLP_OPEN | wx.FLP_FILE_MUST_EXIST)
+        self.kata_selector.GetTextCtrl().Value = katago_path
         content_sizer.Add(self.kata_selector, 0,
                           wx.EXPAND | wx.ALL, self.FromDIP(5))
         label = wx.StaticText(panel, wx.ID_ANY, "Select KataGo configuration")
@@ -401,17 +423,19 @@ class MainFrame(wx.Frame):
             message="Select KataGo configuration",
             wildcard=("KataGo model (*.cfg)|*.cfg;*.bin|All files|*.*"),
             style=wx.FLP_USE_TEXTCTRL | wx.FLP_OPEN | wx.FLP_FILE_MUST_EXIST)
+        self.config_selector.GetTextCtrl().Value = config_path
         content_sizer.Add(self.config_selector, 0,
                           wx.EXPAND | wx.ALL, self.FromDIP(5))
         label = wx.StaticText(panel, wx.ID_ANY, "Select KataGo model")
         content_sizer.Add(label, 0,
                           wx.EXPAND | wx.ALL, self.FromDIP(5))
         self.model_selector = wx.FilePickerCtrl(
-            panel, wx.ID_ANY, "",
+            panel, wx.ID_ANY, model_path,
             message="Select KataGo model",
             wildcard=("KataGo model (*.bin.gz;*.bin)|*.bin.gz;*.bin|" +
                       "All files|*.*"),
             style=wx.FLP_USE_TEXTCTRL | wx.FLP_OPEN | wx.FLP_FILE_MUST_EXIST)
+        self.model_selector.GetTextCtrl().Value = model_path
         content_sizer.Add(self.model_selector, 0,
                           wx.EXPAND | wx.ALL, self.FromDIP(5))
         panel.SetSizer(panel_sizer)
@@ -480,9 +504,9 @@ class MainFrame(wx.Frame):
 
     def load_page_4(self) -> bool:
         """Load page 4."""
-        katago_path = self.kata_selector.GetTextCtrl().Value
-        config_path = self.config_selector.GetTextCtrl().Value
-        model_path = self.model_selector.GetTextCtrl().Value
+        katago_path = os.path.abspath(self.kata_selector.GetTextCtrl().Value)
+        config_path = os.path.abspath(self.config_selector.GetTextCtrl().Value)
+        model_path = os.path.abspath(self.model_selector.GetTextCtrl().Value)
         if not katago_path or not config_path or not model_path \
                 or not os.path.exists(katago_path) \
                 or not os.path.exists(config_path) \
