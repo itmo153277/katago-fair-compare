@@ -590,7 +590,7 @@ class MainFrame(wx.Frame):
         confirm_text += f"Position:\n\tmove {self.move_idx}\n\n"
         confirm_text += "Moves to compare:\n"
         for i, j in self.sel_moves:
-            confirm_text += f"\t- {Board.LABELS[i]}{j + 1}\n"
+            confirm_text += f"\t{Board.LABELS[i]}{j + 1}\n"
         confirm_text += "\n"
         confirm_text += f"KataGo path\n\t{katago_path}\n\n"
         confirm_text += f"KataGo config\n\t{config_path}\n\n"
