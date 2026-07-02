@@ -294,8 +294,8 @@ class MainFrame(wx.Frame):
             "Select position",
             "Select moves",
             "Analysis settings",
-            "Confirm Settings",
-            "Analyzing",
+            "Confirm settings",
+            "Analyzing...",
         ]
         self.page_loaders = [
             self.load_page_1,
@@ -510,7 +510,10 @@ class MainFrame(wx.Frame):
         panel = wx.Panel(self.main_panel, wx.ID_ANY)
         panel_sizer = wx.BoxSizer(wx.VERTICAL)
 
-        self.progress_bar = wx.Gauge(panel, wx.ID_ANY)
+        self.progress_bar = wx.Gauge(
+            panel, wx.ID_ANY,
+            style=wx.GA_HORIZONTAL | wx.GA_SMOOTH | wx.GA_PROGRESS
+        )
         panel_sizer.Add(self.progress_bar, 0,
                         wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM,
                         self.FromDIP(10))
@@ -617,6 +620,7 @@ class MainFrame(wx.Frame):
         self.cancel_btn.Disable()
         self.next_btn.Enable()
         self.analyzer = None
+        self.title_label.SetLabelText("Analysis complete")
 
     def update_progress(self, progress: int) -> None:
         """Update analysis progress."""
