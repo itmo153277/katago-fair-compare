@@ -1,0 +1,1 @@
+# katago-fair-compare
