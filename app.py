@@ -673,6 +673,7 @@ class App(wx.App):
 
     def OnInit(self):
         """Init handler."""
+        wx.StandardPaths.Get().SetFileLayout(wx.StandardPaths.FileLayout_XDG)
         self.locale = wx.Locale(wx.LANGUAGE_DEFAULT)
         self.SetAppName("KatagoFairCompare")
         self.SetAppDisplayName("SGF Analyzer")
