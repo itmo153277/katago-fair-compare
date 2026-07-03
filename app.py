@@ -3,13 +3,14 @@
 
 """App."""
 
-from typing import Tuple, List, Callable
+from typing import Tuple, List, Callable, Any
 import platform
 import sys
 import os
+import time
 import json
 import threading
-import time
+import subprocess
 import wx
 from sgfmill import sgf, sgf_moves, boards as sgf_board
 
@@ -23,34 +24,389 @@ class Analyzer:
     """Analyzer class."""
 
     def __init__(self, log: Callable[[str], None],
-                 progress: Callable[[int], None],
-                 finish: Callable[[], None]) -> None:
+                 progress: Callable[[float], None],
+                 finish: Callable[[], None],
+                 katago_path: str,
+                 config_path: str,
+                 model_path: str,
+                 init_moves: List[Tuple[str, str]],
+                 game_moves: List[Tuple[str, str]],
+                 move_colour: str,
+                 moves: List[str]) -> None:
         """Construct analyzer."""
         self.log = log
         self.progress = progress
         self.finish = finish
+        self.init_moves = init_moves
+        self.game_moves = game_moves
+        self.colour = move_colour
+        self.moves = moves
+        self.weight_komi = 50000.0
+        self.cur_weight_komi = 0.0
+        self.weight_dead = 50000.0
+        self.cur_weight_dead = 0
+        self.weight_moves = [50000.0 for _ in moves]
+        self.cur_weight_moves = [0.0 for _ in moves]
         self.aborted = False
-        self.thread = threading.Thread(target=self.run)
+        self.command_lock = threading.Lock()
+        self.analysis_cond = threading.Condition()
+        self.analysis_result = None
+        self.katago = None
+        self.katago_path = katago_path
+        self.config_path = config_path
+        self.model_path = model_path
+        self.thread = threading.Thread(target=self.run, name="AnalysisThread")
         self.thread.start()
 
     def run(self) -> None:
         """Execute analysis."""
         try:
-            progress = 0
-            while not self.aborted and progress < 100:
-                time.sleep(0.5)
-                progress += 1
-                self.progress(progress)
-                self.log(f"Progress {progress}")
-            if self.aborted:
-                self.log("Aborted")
-            else:
-                self.log("Done")
+            self.log("Launching KataGo...")
+            self.launch_katago()
+            assert self.katago is not None
+            ver = self.get_version()
+            time.sleep(0.5)
+            self.log(f"KataGo {ver} is ready")
+            self.progress(0)
+
+            self.log("Calculating komi...")
+            komi = self.calc_komi(0)
+            self.weight_dead, self.weight_komi = \
+                self.weight_komi, self.weight_dead
+            self.cur_weight_dead, self.cur_weight_komi = \
+                self.cur_weight_komi, self.cur_weight_dead
+            komi += self.calc_komi(komi)
+            self.log(f"Komi: {komi}")
+
+            final_results = []
+
+            for move_idx, move in enumerate(self.moves):
+                self.log(f"Analyzing move {move}...")
+                res, radius, visits = self.analyze_move(move_idx, komi)
+                self.log(f"Preliminary result for {move}: "
+                         f"{res * 100:.3f} "
+                         f"(radius: {radius * 100:.3f}; "
+                         f"visits: {visits})")
+                final_results.append((res, radius))
+
+            ret = self.katago_exit()
+            if ret != 0:
+                raise RuntimeError(
+                    f"KataGo exited with code {ret}")
+            self.katago = None
+            self.progress(1.0)
+            self.log("Done")
+            self.log("")
+            self.log("Results (higher is better):")
+            for move, (res, radius) in zip(self.moves, final_results):
+                self.log(f"{move}: {res * 100:.3f} "
+                         f"(radius: {radius * 100:.3f})")
         except Exception as e:
             self.log(f"Error: {e}")
             raise
         finally:
+            self.katago_terminate()
             self.finish()
+
+    def launch_katago(self) -> None:
+        """Launch katago."""
+        process = subprocess.Popen(
+            [
+                self.katago_path,
+                "analysis",
+                "-model", self.model_path,
+                "-config", self.config_path,
+                "-override-config",
+                "reportAnalysisWinratesAs=BLACK, numSearchThreads=1",
+            ],
+            stderr=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stdin=subprocess.PIPE
+        )
+        stderr_thread = threading.Thread(target=self.katago_log,
+                                         name="KataGoStdErr")
+        stdout_thread = threading.Thread(target=self.katago_output,
+                                         name="KataGoStdOut")
+        self.katago = process
+        stderr_thread.start()
+        stdout_thread.start()
+
+    def katago_log(self) -> None:
+        """Log for KataGo."""
+        if self.katago is None:
+            return
+        pipe = self.katago.stderr
+        assert pipe is not None
+        for line in iter(pipe.readline, b''):
+            self.log(f"[KataGo] {line.decode('utf-8').rstrip()}")
+        pipe.close()
+
+    def katago_output(self) -> None:
+        """Process output for KataGo."""
+        katago = self.katago
+        if katago is None:
+            return
+        pipe = katago.stdout
+        assert pipe is not None
+        try:
+            for line in iter(pipe.readline, b''):
+                with self.analysis_cond:
+                    self.analysis_result = json.loads(line)
+                    self.analysis_cond.notify_all()
+            with self.analysis_cond:
+                self.analysis_cond.notify_all()
+        except Exception as e:
+            self.log(f"Error parsing output from KataGo: {e}")
+            self.abort()
+            raise e
+        finally:
+            pipe.close()
+
+    def katago_send_command(self, command: Any) -> None:
+        """Send analysis command to KataGo."""
+        katago = self.katago
+        if katago is None:
+            return
+        if katago.returncode is not None:
+            return
+        with self.command_lock:
+            pipe = katago.stdin
+            assert pipe is not None
+            if not pipe.closed:
+                print(command)
+                pipe.write(json.dumps(command).encode())
+                pipe.write(b'\n')
+                pipe.flush()
+
+    def katago_wait_output(self) -> Any:
+        """Wait for KataGo output."""
+        katago = self.katago
+        if katago is None:
+            raise ValueError("KataGo is not running")
+        while True:
+            if self.aborted:
+                raise RuntimeError("Aborted")
+            ret = katago.poll()
+            if ret is not None:
+                raise RuntimeError(f"Unexpected termination: Error {ret}")
+            with self.analysis_cond:
+                if self.analysis_result is None:
+                    self.analysis_cond.wait()
+                    if self.analysis_result is None:
+                        continue
+                obj = self.analysis_result
+                self.analysis_result = None
+            if not isinstance(obj, dict):
+                raise ValueError("Unknown response from KataGo")
+            if "error" in obj:
+                raise RuntimeError(f"KataGo error: {obj['error']}")
+            if "warning" in obj:
+                self.log(f"KataGo warning: {obj['warning']}")
+                continue
+            return obj
+
+    def katago_stop(self) -> None:
+        """Stop KataGo gracefully."""
+        katago = self.katago
+        if katago is None:
+            return
+        self.katago_send_command({"id": "term", "action": "terminate_all"})
+        with self.command_lock:
+            assert katago.stdin is not None
+            katago.stdin.close()
+
+    def katago_terminate(self) -> None:
+        """Terminate KataGo."""
+        if self.katago is None:
+            return
+        self.katago_stop()
+        try:
+            self.katago.wait(10)
+        except subprocess.TimeoutExpired:
+            self.katago.terminate()
+        self.katago = None
+
+    def katago_exit(self) -> int:
+        """Stop KataGo and exit process."""
+        if self.katago is None:
+            raise ValueError("KataGo is not running")
+        self.katago_stop()
+        try:
+            ret = self.katago.wait(10)
+        except subprocess.TimeoutExpired as e:
+            raise RuntimeError("Unable to stop KataGo process") from e
+        self.katago = None
+        return ret
+
+    def abort(self) -> None:
+        """Abort analysis."""
+        self.aborted = True
+        self.katago_stop()
+        with self.analysis_cond:
+            self.analysis_cond.notify_all()
+
+    def get_version(self) -> str:
+        """Wait KataGo to be ready."""
+        self.katago_send_command({"id": "ver", "action": "query_version"})
+        while True:
+            obj = self.katago_wait_output()
+            if obj["id"] == "ver":
+                break
+        return obj.get("version", "")
+
+    def update_progress(self) -> None:
+        """Update progress based on weight estimate"""
+        total_weight = self.weight_komi + self.weight_dead + \
+            sum(self.weight_moves)
+        cur_weight = self.cur_weight_komi + self.cur_weight_dead + \
+            sum(self.cur_weight_moves)
+        print(total_weight, cur_weight)
+        self.progress(cur_weight / total_weight)
+
+    def calc_komi(self, init_komi: float) -> float:
+        """Calculate real komi."""
+        target_visits = 1000000
+        min_weight = 30000.0
+        cur_visits = 0
+        move_obj = {}
+        if self.game_moves:
+            moves = self.game_moves[:-1]
+            colour, move = self.game_moves[-1]
+        else:
+            moves = []
+            colour = self.colour
+            move = "pass"
+        while self.cur_weight_komi < self.weight_komi:
+            self.katago_send_command({
+                "id": "komi",
+                "initialStones": self.init_moves,
+                "moves": moves,
+                "rules": "chinese",
+                "komi": init_komi,
+                "boardXSize": 19,
+                "boardYSize": 19,
+                "maxVisits": target_visits,
+                "reportDuringSearchEvery": 1.0,
+                "allowMoves": [{
+                    "player": colour,
+                    "moves": [move],
+                    "untilDepth": 1,
+                }],
+            })
+            while True:
+                obj = self.katago_wait_output()
+                if obj.get("id") != "komi":
+                    continue
+                move_infos = obj.get("moveInfos", [])
+                move_infos = [x for x in move_infos
+                              if x["move"] == move]
+                if not move_infos:
+                    continue
+                move_obj = move_infos[0]
+                visits = move_obj["visits"]
+                if visits < cur_visits:
+                    self.update_progress()
+                    continue
+                cur_visits = visits
+                self.cur_weight_komi = move_obj["weight"]
+                if self.cur_weight_komi >= min_weight:
+                    radius = abs(move_obj["utility"] - move_obj["utilityLcb"])
+                    self.weight_komi = max(
+                        50000.0,
+                        self.recalculate_target_weight(
+                            radius, self.cur_weight_komi),
+                    )
+                if self.cur_weight_komi >= self.weight_komi \
+                        and obj.get("isDuringSearch", False):
+                    self.katago_send_command({
+                        "id": "komi_term",
+                        "action": "terminate",
+                        "terminateId": "komi"
+                    })
+                self.update_progress()
+                if not obj.get("isDuringSearch", False):
+                    break
+            target_visits *= 2
+        print(move_obj["visits"], move_obj["utility"], move_obj["utilityLcb"],
+              abs(move_obj["utility"] - move_obj["utilityLcb"]),
+              move_obj["scoreLead"])
+        return int(move_obj["scoreLead"] * 2 + 0.5) / 2
+
+    def analyze_move(self, move_idx: int, komi: float) -> Any:
+        """Analyze move."""
+        target_visits = 1000000
+        min_weight = 30000.0
+        cur_visits = 0
+        move_obj = {}
+        proc_id = f"move-{move_idx}"
+        while self.cur_weight_moves[move_idx] < self.weight_moves[move_idx]:
+            self.katago_send_command({
+                "id": proc_id,
+                "initialStones": self.init_moves,
+                "moves": self.game_moves,
+                "rules": "chinese",
+                "komi": komi,
+                "boardXSize": 19,
+                "boardYSize": 19,
+                "maxVisits": target_visits,
+                "reportDuringSearchEvery": 1.0,
+                "allowMoves": [{
+                    "player": self.colour,
+                    "moves": [self.moves[move_idx]],
+                    "untilDepth": 1,
+                }],
+            })
+            while True:
+                obj = self.katago_wait_output()
+                if obj.get("id") != proc_id:
+                    continue
+                move_infos = obj.get("moveInfos", [])
+                move_infos = [x for x in move_infos
+                              if x["move"] == self.moves[move_idx]]
+                if not move_infos:
+                    continue
+                move_obj = move_infos[0]
+                visits = move_obj["visits"]
+                if visits < cur_visits:
+                    self.update_progress()
+                    continue
+                cur_visits = visits
+                self.cur_weight_moves[move_idx] = move_obj["weight"]
+                if self.cur_weight_moves[move_idx] >= min_weight:
+                    radius = abs(move_obj["utility"] - move_obj["utilityLcb"])
+                    self.weight_moves[move_idx] = max(
+                        50000.0,
+                        self.recalculate_target_weight(
+                            radius, self.cur_weight_moves[move_idx])
+                    )
+                if self.cur_weight_moves[move_idx] >= \
+                        self.weight_moves[move_idx] \
+                        and obj.get("isDuringSearch", False):
+                    self.katago_send_command({
+                        "id": f"{proc_id}_term",
+                        "action": "terminate",
+                        "terminateId": proc_id,
+                    })
+                self.update_progress()
+                if not obj.get("isDuringSearch", False):
+                    break
+            target_visits *= 2
+        self.update_progress()
+        print(move_obj["scoreLead"])
+        res = move_obj['utility']
+        radius = abs(move_obj["utility"] - move_obj["utilityLcb"])
+        if self.colour == "W":
+            res = -res
+        return res, radius, cur_visits
+
+    def recalculate_target_weight(self, radius: float, weight: float) -> float:
+        """Recalculate target weight for progress bar."""
+        target_radius = 0.005
+        scale = radius / target_radius
+        if scale < 1:
+            return weight
+        else:
+            return weight * scale * scale
 
 
 class Board(wx.Control):
@@ -249,6 +605,7 @@ class MainFrame(wx.Frame):
         self.first_to_move = "b"
         self.sel_moves = []
         self.analyzer = None
+        self.analysis_start = None
         self.config: wx.ConfigBase = \
             wx.Config(wx.GetApp().GetAppName())  # type: ignore
 
@@ -508,6 +865,10 @@ class MainFrame(wx.Frame):
         panel_sizer.Add(self.progress_bar, 0,
                         wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM,
                         self.FromDIP(10))
+        self.progress_label = wx.StaticText(panel, wx.ID_ANY, "")
+        panel_sizer.Add(self.progress_label, 0,
+                        wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM,
+                        self.FromDIP(10))
 
         self.log_textarea = wx.TextCtrl(
             panel, wx.ID_ANY, "",
@@ -563,9 +924,9 @@ class MainFrame(wx.Frame):
 
     def load_page_4(self) -> bool:
         """Load page 4."""
-        katago_path = os.path.abspath(self.kata_selector.GetTextCtrl().Value)
-        config_path = os.path.abspath(self.config_selector.GetTextCtrl().Value)
-        model_path = os.path.abspath(self.model_selector.GetTextCtrl().Value)
+        katago_path = self.kata_selector.GetTextCtrl().Value
+        config_path = self.config_selector.GetTextCtrl().Value
+        model_path = self.model_selector.GetTextCtrl().Value
         if not katago_path or not config_path or not model_path \
                 or not os.path.exists(katago_path) \
                 or not os.path.exists(config_path) \
@@ -586,11 +947,39 @@ class MainFrame(wx.Frame):
 
     def load_page_5(self) -> bool:
         """Load page 5."""
+        katago_path = self.kata_selector.GetTextCtrl().Value
+        config_path = self.config_selector.GetTextCtrl().Value
+        model_path = self.model_selector.GetTextCtrl().Value
+        init_moves = []
+        for j in range(19):
+            for i in range(19):
+                move = self.init_board.get(j, i)
+                if move is not None:
+                    init_moves.append((move.upper(),
+                                       f"{Board.LABELS[i]}{j + 1}"))
+        game_moves = []
+        for col, move in self.moves[:self.move_idx]:
+            if move is None:
+                game_moves.append((col.upper(), "pass"))
+            else:
+                j, i = move
+                game_moves.append((col.upper(),
+                                   f"{Board.LABELS[i]}{j + 1}"))
+        moves = []
+        for i, j in self.sel_moves:
+            moves.append(f"{Board.LABELS[i]}{j + 1}")
         self.analyzer = Analyzer(
             log=lambda msg: wx.CallAfter(self.analyzer_log, msg),
             progress=lambda progress: wx.CallAfter(
                 self.update_progress, progress),
-            finish=lambda: wx.CallAfter(self.finish_analysis)
+            finish=lambda: wx.CallAfter(self.finish_analysis),
+            katago_path=katago_path,
+            config_path=config_path,
+            model_path=model_path,
+            init_moves=init_moves,
+            game_moves=game_moves,
+            move_colour=self.sel_board.colour.upper(),
+            moves=moves,
         )
         return True
 
@@ -611,9 +1000,21 @@ class MainFrame(wx.Frame):
         if not aborted:
             wx.Bell()
 
-    def update_progress(self, progress: int) -> None:
+    def update_progress(self, progress: float) -> None:
         """Update analysis progress."""
-        self.progress_bar.Value = progress
+        if self.analysis_start is None:
+            self.analysis_start = time.time()
+        else:
+            elapsed = time.time() - self.analysis_start
+            total = elapsed / progress
+            elapsed_str = wx.TimeSpan.Milliseconds(
+                int(elapsed * 1000)).Format("%H:%M:%S")
+            total_str = wx.TimeSpan.Milliseconds(
+                int(total * 1000)).Format("%H:%M:%S")
+            self.progress_label.SetLabelText(
+                f"Estimated time {elapsed_str} / {total_str}")
+
+        self.progress_bar.Value = int(progress * 100 + 0.5)
 
     def update_page(self) -> None:
         """Update page."""
@@ -667,7 +1068,7 @@ class MainFrame(wx.Frame):
             return
         if self.analyzer is not None:
             self.cancel_btn.Disable()
-            self.analyzer.aborted = True
+            self.analyzer.abort()
             return
         self.Close()
 
@@ -774,12 +1175,12 @@ class App(wx.App):
 
     # pylint: disable=invalid-name
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Construct app."""
         super().__init__()
         self.locale = None
 
-    def OnInit(self):
+    def OnInit(self) -> bool:
         """Init handler."""
         wx.StandardPaths.Get().SetFileLayout(wx.StandardPaths.FileLayout_XDG)
         self.locale = wx.Locale(wx.LANGUAGE_DEFAULT)
