@@ -20,6 +20,31 @@ DATA_DIR = os.path.abspath(os.path.join(
 ))
 
 
+def polyfit(x: List[float], y: List[float], degree: int) -> List[float]:
+    """Fit points into poly."""
+    x_mat = [[xi ** d for d in range(degree, -1, -1)]
+             for xi in x]
+    xt_mat = [[x_mat[r][c] for r in range(len(x_mat))]
+              for c in range(len(x_mat[0]))]
+    xtx_mat = [[sum(xt_mat[r][i] * x_mat[i][c] for i in range(len(x_mat)))
+                for c in range(len(x_mat[0]))]
+               for r in range(len(xt_mat))]
+    xty_mat = [sum(xt_mat[r][i] * y[i] for i in range(len(y)))
+               for r in range(len(xt_mat))]
+    n = len(xtx_mat)
+    for i in range(n):
+        for j in range(i + 1, n):
+            factor = xtx_mat[j][i] / xtx_mat[i][i]
+            for k in range(i, n):
+                xtx_mat[j][k] -= factor * xtx_mat[i][k]
+            xty_mat[j] -= factor * xty_mat[i]
+    coef = [0.0] * n
+    for i in range(n - 1, -1, -1):
+        total = sum(xtx_mat[i][j] * coef[j] for j in range(i + 1, n))
+        coef[i] = (xty_mat[i] - total) / xtx_mat[i][i]
+    return coef
+
+
 class Analyzer:
     """Analyzer class."""
 
@@ -70,12 +95,48 @@ class Analyzer:
             self.progress(0)
 
             self.log("Calculating komi...")
-            komi = self.calc_komi(0)
+            komi = self.calc_komi(0)[0]
             self.weight_dead, self.weight_komi = \
                 self.weight_komi, self.weight_dead
             self.cur_weight_dead, self.cur_weight_komi = \
                 self.cur_weight_komi, self.cur_weight_dead
-            komi += self.calc_komi(komi)
+            komi_tries = {}
+            while True:
+                if komi in komi_tries:
+                    self.log("Selecting best guess")
+                    diff = 2.0
+                    for k, v in komi_tries.items():
+                        cur_diff = abs(v)
+                        if cur_diff < diff:
+                            diff = cur_diff
+                            komi = k
+                    break
+                self.log(f"Trying {komi}...")
+                diff, winrate, visits = self.calc_komi(komi)
+                komi_tries[komi] = winrate - 0.5
+                self.log(f"Visits: {visits}; Winrate: {winrate:.3f}")
+                if abs(diff) < 0.5:
+                    if abs(winrate - 0.5) < 0.1:
+                        break
+                    diff = 0.5 if winrate > 0.5 else -0.5
+                if len(komi_tries) > 1:
+                    coeffs = polyfit(list(komi_tries.keys()),
+                                     list(komi_tries.values()),
+                                     degree=1)
+                    if abs(coeffs[0]) < 0.001:
+                        komi += diff
+                    else:
+                        new_komi = round(-coeffs[1] / coeffs[0] * 2) / 2
+                        if new_komi in komi_tries:
+                            komi += diff
+                        else:
+                            komi = new_komi
+                else:
+                    komi += diff
+                self.weight_dead += self.weight_komi
+                self.cur_weight_dead += self.cur_weight_komi
+                self.weight_komi = 50000
+                self.cur_weight_komi = 0
             self.log(f"Komi: {komi}")
 
             final_results = []
@@ -83,7 +144,7 @@ class Analyzer:
             for move_idx, move in enumerate(self.moves):
                 self.log(f"Analyzing move {move}...")
                 res, radius, visits = self.analyze_move(move_idx, komi)
-                self.log(f"Preliminary result for {move}: "
+                self.log(f"Result for {move}: "
                          f"{res * 100:.3f} "
                          f"(radius: {radius * 100:.3f}; "
                          f"visits: {visits})")
@@ -117,7 +178,9 @@ class Analyzer:
                 "-model", self.model_path,
                 "-config", self.config_path,
                 "-override-config",
-                "reportAnalysisWinratesAs=BLACK, numSearchThreads=1",
+                "reportAnalysisWinratesAs=BLACK, "
+                "numSearchThreads=1, "
+                "useNoisePruning=false",
             ],
             stderr=subprocess.PIPE,
             stdout=subprocess.PIPE,
@@ -263,7 +326,7 @@ class Analyzer:
         print(total_weight, cur_weight)
         self.progress(cur_weight / total_weight)
 
-    def calc_komi(self, init_komi: float) -> float:
+    def calc_komi(self, init_komi: float) -> Tuple[float, float, float]:
         """Calculate real komi."""
         target_visits = 1000000
         min_weight = 30000.0
@@ -274,6 +337,7 @@ class Analyzer:
             colour, move = self.game_moves[-1]
         else:
             moves = []
+            init_komi = -init_komi
             colour = self.colour
             move = "pass"
         while self.cur_weight_komi < self.weight_komi:
@@ -292,6 +356,9 @@ class Analyzer:
                     "moves": [move],
                     "untilDepth": 1,
                 }],
+                "overrideSettings": {
+                    "conservativePass": True,
+                },
             })
             while True:
                 obj = self.katago_wait_output()
@@ -329,8 +396,13 @@ class Analyzer:
             target_visits *= 2
         print(move_obj["visits"], move_obj["utility"], move_obj["utilityLcb"],
               abs(move_obj["utility"] - move_obj["utilityLcb"]),
-              move_obj["scoreLead"])
-        return int(move_obj["scoreLead"] * 2 + 0.5) / 2
+              move_obj["scoreLead"], move_obj["winrate"])
+        lead = move_obj["scoreLead"]
+        winrate = move_obj["winrate"]
+        if not self.game_moves:
+            lead = -lead
+            winrate = 1.0 - winrate
+        return round(lead * 2) / 2, winrate, cur_visits
 
     def analyze_move(self, move_idx: int, komi: float) -> Any:
         """Analyze move."""
