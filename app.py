@@ -171,6 +171,10 @@ class Analyzer:
 
     def launch_katago(self) -> None:
         """Launch katago."""
+        if platform.system() == "Windows":
+            flags = subprocess.CREATE_NO_WINDOW  # type: ignore
+        else:
+            flags = 0
         process = subprocess.Popen(
             [
                 self.katago_path,
@@ -184,7 +188,8 @@ class Analyzer:
             ],
             stderr=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stdin=subprocess.PIPE
+            stdin=subprocess.PIPE,
+            creationflags=flags,
         )
         stderr_thread = threading.Thread(target=self.katago_log,
                                          name="KataGoStdErr")
