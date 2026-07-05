@@ -68,7 +68,7 @@ class Analyzer:
         self.moves = moves
         self.weight_komi = 50000.0
         self.cur_weight_komi = 0.0
-        self.weight_dead = 50000.0
+        self.weight_dead = 100000.0
         self.cur_weight_dead = 0
         self.weight_moves = [50000.0 for _ in moves]
         self.cur_weight_moves = [0.0 for _ in moves]
@@ -96,28 +96,25 @@ class Analyzer:
 
             self.log("Calculating komi...")
             komi = self.calc_komi(0)[0]
-            self.weight_dead, self.weight_komi = \
-                self.weight_komi, self.weight_dead
-            self.cur_weight_dead, self.cur_weight_komi = \
-                self.cur_weight_komi, self.cur_weight_dead
+            self.weight_dead -= 50000
+            self.weight_dead += self.weight_komi
+            self.cur_weight_dead += self.cur_weight_komi
+            self.weight_komi = 0
+            self.cur_weight_komi = 0
             komi_tries = {}
             while True:
                 if komi in komi_tries:
-                    self.log("Selecting best guess")
-                    diff = 2.0
-                    for k, v in komi_tries.items():
-                        cur_diff = abs(v)
-                        if cur_diff < diff:
-                            diff = cur_diff
-                            komi = k
+                    coeffs = polyfit(list(komi_tries.keys()),
+                                     list(komi_tries.values()),
+                                     degree=1)
+                    komi = round(-coeffs[1] / coeffs[0] * 2) / 2
                     break
                 self.log(f"Trying {komi}...")
+                self.weight_komi = 50000
                 diff, winrate, visits = self.calc_komi(komi)
                 komi_tries[komi] = winrate - 0.5
                 self.log(f"Visits: {visits}; Winrate: {winrate:.3f}")
                 if abs(diff) < 0.5:
-                    if abs(winrate - 0.5) < 0.1:
-                        break
                     diff = 0.5 if winrate > 0.5 else -0.5
                 if len(komi_tries) > 1:
                     coeffs = polyfit(list(komi_tries.keys()),
@@ -133,9 +130,10 @@ class Analyzer:
                             komi = new_komi
                 else:
                     komi += diff
+                    self.weight_dead -= 50000
                 self.weight_dead += self.weight_komi
                 self.cur_weight_dead += self.cur_weight_komi
-                self.weight_komi = 50000
+                self.weight_komi = 0
                 self.cur_weight_komi = 0
             self.log(f"Komi: {komi}")
 
@@ -143,11 +141,12 @@ class Analyzer:
 
             for move_idx, move in enumerate(self.moves):
                 self.log(f"Analyzing move {move}...")
-                res, radius, visits = self.analyze_move(move_idx, komi)
+                res, radius, visits, pv = self.analyze_move(move_idx, komi)
                 self.log(f"Result for {move}: "
                          f"{res * 100:.3f} "
                          f"(radius: {radius * 100:.3f}; "
-                         f"visits: {visits})")
+                         f"visits: {visits}, "
+                         f"PV: {pv})")
                 final_results.append((res, radius))
 
             ret = self.katago_exit()
@@ -334,7 +333,7 @@ class Analyzer:
     def calc_komi(self, init_komi: float) -> Tuple[float, float, float]:
         """Calculate real komi."""
         target_visits = 1000000
-        min_weight = 30000.0
+        min_weight = 5000.0
         cur_visits = 0
         move_obj = {}
         if self.game_moves:
@@ -409,10 +408,11 @@ class Analyzer:
             winrate = 1.0 - winrate
         return round(lead * 2) / 2, winrate, cur_visits
 
-    def analyze_move(self, move_idx: int, komi: float) -> Any:
+    def analyze_move(self, move_idx: int, komi: float) -> \
+            Tuple[float, float, float, str]:
         """Analyze move."""
         target_visits = 1000000
-        min_weight = 30000.0
+        min_weight = 5000.0
         cur_visits = 0
         move_obj = {}
         proc_id = f"move-{move_idx}"
@@ -474,7 +474,7 @@ class Analyzer:
         radius = abs(move_obj["utility"] - move_obj["utilityLcb"])
         if self.colour == "W":
             res = -res
-        return res, radius, cur_visits
+        return res, radius, cur_visits, " ".join(move_obj["pv"])
 
     def recalculate_target_weight(self, radius: float, weight: float) -> float:
         """Recalculate target weight for progress bar."""
