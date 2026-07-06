@@ -19,9 +19,14 @@ DATA_DIR = os.path.abspath(os.path.join(
     "resources"
 ))
 
+SYSTEM = platform.system()
+IS_WINDOWS = SYSTEM == "Windows"
+IS_MAC = SYSTEM == "Darwin"
+IS_FROZEN = getattr(sys, "frozen", False)
+
 
 def polyfit(x: List[float], y: List[float], degree: int) -> List[float]:
-    """Fit points into poly."""
+    """Fit points to a polynomial."""
     x_mat = [[xi ** d for d in range(degree, -1, -1)]
              for xi in x]
     xt_mat = [[x_mat[r][c] for r in range(len(x_mat))]
@@ -76,6 +81,7 @@ class Analyzer:
         self.command_lock = threading.Lock()
         self.analysis_cond = threading.Condition()
         self.analysis_result = None
+        self.analysis_exit = False
         self.katago = None
         self.katago_path = katago_path
         self.config_path = config_path
@@ -145,8 +151,8 @@ class Analyzer:
                 self.log(f"Result for {move}: "
                          f"{res * 100:.3f} "
                          f"(radius: {radius * 100:.3f}; "
-                         f"visits: {visits}, "
-                         f"PV: {pv})")
+                         f"visits: {visits})")
+                self.log(f"PV: {pv}")
                 final_results.append((res, radius))
 
             ret = self.katago_exit()
@@ -170,7 +176,7 @@ class Analyzer:
 
     def launch_katago(self) -> None:
         """Launch katago."""
-        if platform.system() == "Windows":
+        if IS_WINDOWS:
             flags = subprocess.CREATE_NO_WINDOW  # type: ignore
         else:
             flags = 0
@@ -220,14 +226,15 @@ class Analyzer:
                 with self.analysis_cond:
                     self.analysis_result = json.loads(line)
                     self.analysis_cond.notify_all()
-            with self.analysis_cond:
-                self.analysis_cond.notify_all()
         except Exception as e:
             self.log(f"Error parsing output from KataGo: {e}")
             self.abort()
             raise e
         finally:
             pipe.close()
+            with self.analysis_cond:
+                self.analysis_exit = True
+                self.analysis_cond.notify_all()
 
     def katago_send_command(self, command: Any) -> None:
         """Send analysis command to KataGo."""
@@ -257,6 +264,8 @@ class Analyzer:
             if ret is not None:
                 raise RuntimeError(f"Unexpected termination: Error {ret}")
             with self.analysis_cond:
+                if self.analysis_exit:
+                    continue
                 if self.analysis_result is None:
                     self.analysis_cond.wait()
                     if self.analysis_result is None:
@@ -313,7 +322,7 @@ class Analyzer:
             self.analysis_cond.notify_all()
 
     def get_version(self) -> str:
-        """Wait KataGo to be ready."""
+        """Wait for KataGo to be ready."""
         self.katago_send_command({"id": "ver", "action": "query_version"})
         while True:
             obj = self.katago_wait_output()
@@ -322,7 +331,7 @@ class Analyzer:
         return obj.get("version", "")
 
     def update_progress(self) -> None:
-        """Update progress based on weight estimate"""
+        """Update progress based on weight estimate."""
         total_weight = self.weight_komi + self.weight_dead + \
             sum(self.weight_moves)
         cur_weight = self.cur_weight_komi + self.cur_weight_dead + \
@@ -683,14 +692,24 @@ class MainFrame(wx.Frame):
         self.sel_moves = []
         self.analyzer = None
         self.analysis_start = None
-        self.config: wx.ConfigBase = \
-            wx.Config(wx.GetApp().GetAppName())  # type: ignore
+        self.config: wx.ConfigBase = wx.Config.Get()  # type: ignore
 
-        if getattr(sys, "frozen", False) and platform.system() == "Windows":
+        if IS_FROZEN and IS_WINDOWS:
             self.SetIcon(wx.Icon(sys.executable, wx.BITMAP_TYPE_ICO))
+        elif IS_FROZEN and IS_MAC:
+            pass
         else:
-            self.SetIcon(wx.Icon(os.path.join(DATA_DIR, "icon.png"),
-                                 wx.BITMAP_TYPE_PNG))
+            icon_bundle = wx.IconBundle()
+            icon_img = wx.Image(os.path.join(DATA_DIR, "icon.png"),
+                                wx.BITMAP_TYPE_PNG)
+            icon_big = wx.Icon()
+            icon_big.CopyFromBitmap(wx.Bitmap(icon_img))
+            for size in [16, 32, 48, 64, 96, 128, 256]:
+                icon = wx.Icon()
+                icon.CopyFromBitmap(wx.Bitmap(icon_img.Scale(size, size)))
+                icon_bundle.AddIcon(icon)
+            icon_bundle.AddIcon(icon_big)
+            self.SetIcons(icon_bundle)
 
         self.main_panel = wx.Panel(self)
 
@@ -854,6 +873,8 @@ class MainFrame(wx.Frame):
         katago_path = self.config.Read("EnginePath")
         config_path = self.config.Read("ConfigPath")
         model_path = self.config.Read("ModelPath")
+        guess_config = (not config_path and
+                        not self.config.HasEntry("ConfigPath"))
 
         if not katago_path or not config_path or not model_path:
             katrain_conf_path = os.path.join(
@@ -864,10 +885,44 @@ class MainFrame(wx.Frame):
                 engine_conf = katrain_conf.get("engine", {})
                 if not katago_path:
                     katago_path = engine_conf.get("katago", "")
-                if not config_path:
+                    if not os.path.exists(katago_path):
+                        katago_path = ""
+                if guess_config:
                     config_path = engine_conf.get("config", "")
+                    if not os.path.exists(config_path):
+                        config_path = ""
+                    else:
+                        guess_config = False
                 if not model_path:
                     model_path = engine_conf.get("model", "")
+                    if not os.path.exists(model_path):
+                        model_path = ""
+            katrain_mac = "/Applications/KaTrain.app/Contents"
+            if IS_MAC and os.path.exists(katrain_mac):
+                if not katago_path:
+                    katago_path = os.path.join(
+                        katrain_mac,
+                        "Frameworks/katrain/KataGo/katago-osx"
+                    )
+                    if not os.path.exists(katago_path):
+                        katago_path = ""
+                if guess_config:
+                    config_path = os.path.join(
+                        katrain_mac,
+                        "Resources/katrain/KataGo/analysis_config.cfg"
+                    )
+                    if not os.path.exists(config_path):
+                        config_path = ""
+                if not model_path:
+                    models_dir_mac = os.path.join(
+                        katrain_mac,
+                        "Resources/katrain/models"
+                    )
+                    models_mac = [os.path.join(models_dir_mac, x)
+                                  for x in os.listdir(models_dir_mac)
+                                  if x.endswith(".bin.gz")]
+                    if models_mac:
+                        model_path = models_mac[0]
 
         panel = wx.ScrolledWindow(self.main_panel, wx.ID_ANY)
         panel.SetScrollRate(0, self.FromDIP(10))
@@ -890,7 +945,10 @@ class MainFrame(wx.Frame):
         self.kata_selector.GetTextCtrl().Value = katago_path
         content_sizer.Add(self.kata_selector, 0,
                           wx.EXPAND | wx.ALL, self.FromDIP(5))
-        label = wx.StaticText(panel, wx.ID_ANY, "Select KataGo configuration")
+        label = wx.StaticText(
+            panel, wx.ID_ANY,
+            "Select KataGo configuration (leave blank to use default)"
+        )
         content_sizer.Add(label, 0,
                           wx.EXPAND | wx.ALL, self.FromDIP(5))
         self.config_selector = wx.FilePickerCtrl(
@@ -931,7 +989,7 @@ class MainFrame(wx.Frame):
         return panel
 
     def create_page_5(self) -> wx.Panel:
-        """Create page 4 panel."""
+        """Create page 5 panel."""
         panel = wx.Panel(self.main_panel, wx.ID_ANY)
         panel_sizer = wx.BoxSizer(wx.VERTICAL)
 
@@ -1004,6 +1062,8 @@ class MainFrame(wx.Frame):
         katago_path = self.kata_selector.GetTextCtrl().Value
         config_path = self.config_selector.GetTextCtrl().Value
         model_path = self.model_selector.GetTextCtrl().Value
+        if not config_path:
+            config_path = os.path.join(DATA_DIR, "config.cfg")
         if not katago_path or not config_path or not model_path \
                 or not os.path.exists(katago_path) \
                 or not os.path.exists(config_path) \
@@ -1027,6 +1087,12 @@ class MainFrame(wx.Frame):
         katago_path = self.kata_selector.GetTextCtrl().Value
         config_path = self.config_selector.GetTextCtrl().Value
         model_path = self.model_selector.GetTextCtrl().Value
+        self.config.Write("EnginePath", katago_path)
+        self.config.Write("ConfigPath", config_path)
+        self.config.Write("ModelPath", model_path)
+        self.config.Flush()
+        if not config_path:
+            config_path = os.path.join(DATA_DIR, "config.cfg")
         init_moves = []
         for j in range(19):
             for i in range(19):
@@ -1117,9 +1183,12 @@ class MainFrame(wx.Frame):
     def update_layout(self) -> None:
         """Update window layout."""
         self.SetMinClientSize(self.main_panel.GetSizer().GetMinSize())
+        min_size = self.GetEffectiveMinSize()
+        cur_size = self.GetSize()
+        cur_size.IncTo(min_size)
+        self.SetSize(cur_size)
         self.current_page.Layout()
         self.main_panel.Layout()
-        self.Fit()
 
     def on_back_click(self, _evt) -> None:
         """Select previous page."""
@@ -1190,7 +1259,7 @@ class MainFrame(wx.Frame):
         self.update_board()
 
     def on_sel_click(self, _evt) -> None:
-        """Move selection click."""
+        """Handle move selection click."""
         sel_x = self.sel_board.sel_x
         sel_y = self.sel_board.sel_y
         if sel_x is None or sel_y is None:
