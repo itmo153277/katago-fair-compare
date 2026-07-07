@@ -26,6 +26,7 @@ WizardSmallImageFile=compiler:WizClassicSmallImage.bmp
 SetupIconFile=compiler:SetupClassicIcon.ico
 ShowLanguageDialog=no
 LanguageDetectionMethod=uilanguage
+LicenseFile=..\LICENSE
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
