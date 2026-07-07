@@ -126,7 +126,15 @@ class Analyzer:
                 komi_tries[komi] = winrate - 0.5
                 self.log(_("Visits: %d; winrate: %.3f") % (visits, winrate))
                 if (komi + diff) in komi_tries:
-                    diff = 0.5 if winrate > 0.5 else -0.5
+                    step = 0.5 if winrate > 0.5 else -0.5
+                    diff = 0
+                    while True:
+                        diff += step
+                        val = komi_tries.get(komi + diff, None)
+                        if val is None:
+                            break
+                        if (winrate - 0.5) * val <= 0:
+                            break
                 if len(komi_tries) > 1:
                     coeffs = polyfit(list(komi_tries.keys()),
                                      list(komi_tries.values()),
