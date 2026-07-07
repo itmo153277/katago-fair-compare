@@ -4,6 +4,7 @@
 """App."""
 
 from typing import Tuple, List, Callable, Any
+import builtins
 import platform
 import sys
 import os
@@ -14,10 +15,10 @@ import subprocess
 import wx
 from sgfmill import sgf, sgf_moves, boards as sgf_board
 
-DATA_DIR = os.path.abspath(os.path.join(
-    os.path.dirname(__file__),
-    "resources"
-))
+builtins.__dict__["_"] = wx.GetTranslation
+
+ROOT_DIR = os.path.abspath(os.path.dirname(__file__))
+DATA_DIR = os.path.join(ROOT_DIR,  "resources")
 
 SYSTEM = platform.system()
 IS_WINDOWS = SYSTEM == "Windows"
@@ -92,15 +93,15 @@ class Analyzer:
     def run(self) -> None:
         """Execute analysis."""
         try:
-            self.log("Launching KataGo...")
+            self.log(_("Launching KataGo..."))
             self.launch_katago()
             assert self.katago is not None
             ver = self.get_version()
             time.sleep(0.5)
-            self.log(f"KataGo {ver} is ready")
+            self.log(_("KataGo %s is ready") % ver)
             self.progress(0)
 
-            self.log("Calculating komi...")
+            self.log(_("Calculating komi..."))
             komi = self.calc_komi(0)[0]
             self.weight_dead -= 50000
             self.weight_dead += self.weight_komi
@@ -115,11 +116,11 @@ class Analyzer:
                                      degree=1)
                     komi = round(-coeffs[1] / coeffs[0] * 2) / 2
                     break
-                self.log(f"Trying {komi}...")
+                self.log(_("Trying %.1f...") % komi)
                 self.weight_komi = 50000
                 diff, winrate, visits = self.calc_komi(komi)
                 komi_tries[komi] = winrate - 0.5
-                self.log(f"Visits: {visits}; Winrate: {winrate:.3f}")
+                self.log(_("Visits: %d; winrate: %.3f") % (visits, winrate))
                 if abs(diff) < 0.5:
                     diff = 0.5 if winrate > 0.5 else -0.5
                 if len(komi_tries) > 1:
@@ -141,34 +142,33 @@ class Analyzer:
                 self.cur_weight_dead += self.cur_weight_komi
                 self.weight_komi = 0
                 self.cur_weight_komi = 0
-            self.log(f"Komi: {komi}")
+            self.log(_("Komi: %.1f") % komi)
 
             final_results = []
 
             for move_idx, move in enumerate(self.moves):
-                self.log(f"Analyzing move {move}...")
+                self.log(_("Analyzing move %s...") % move)
                 res, radius, visits, pv = self.analyze_move(move_idx, komi)
-                self.log(f"Result for {move}: "
-                         f"{res * 100:.3f} "
-                         f"(radius: {radius * 100:.3f}; "
-                         f"visits: {visits})")
+                self.log(
+                    _("Result for %s: %.3f (radius: %.3f visits %d)") %
+                    (move, res * 100, radius * 100, visits)
+                )
                 self.log(f"PV: {pv}")
                 final_results.append((res, radius))
 
             ret = self.katago_exit()
             if ret != 0:
-                raise RuntimeError(
-                    f"KataGo exited with code {ret}")
+                raise RuntimeError(_("KataGo exited with code %d") % ret)
             self.katago = None
             self.progress(1.0)
-            self.log("Done")
+            self.log(_("Done"))
             self.log("")
-            self.log("Results (higher is better):")
+            self.log(_("Results (higher is better):"))
             for move, (res, radius) in zip(self.moves, final_results):
-                self.log(f"{move}: {res * 100:.3f} "
-                         f"(radius: {radius * 100:.3f})")
+                self.log(_("%s: %.3f (radius %.3f)") %
+                         (move, res * 100, radius * 100))
         except Exception as e:
-            self.log(f"Error: {e}")
+            self.log(_("Error: %s") % e)
             raise
         finally:
             self.katago_terminate()
@@ -247,7 +247,6 @@ class Analyzer:
             pipe = katago.stdin
             assert pipe is not None
             if not pipe.closed:
-                print(command)
                 pipe.write(json.dumps(command).encode())
                 pipe.write(b'\n')
                 pipe.flush()
@@ -256,13 +255,13 @@ class Analyzer:
         """Wait for KataGo output."""
         katago = self.katago
         if katago is None:
-            raise ValueError("KataGo is not running")
+            raise ValueError(_("KataGo is not running"))
         while True:
             if self.aborted:
-                raise RuntimeError("Aborted")
+                raise RuntimeError(_("Aborted"))
             ret = katago.poll()
             if ret is not None:
-                raise RuntimeError(f"Unexpected termination: Error {ret}")
+                raise RuntimeError(_("Unexpected termination: Error %d") % ret)
             with self.analysis_cond:
                 if self.analysis_exit:
                     continue
@@ -273,11 +272,11 @@ class Analyzer:
                 obj = self.analysis_result
                 self.analysis_result = None
             if not isinstance(obj, dict):
-                raise ValueError("Unknown response from KataGo")
+                raise ValueError(_("Unknown response from KataGo"))
             if "error" in obj:
-                raise RuntimeError(f"KataGo error: {obj['error']}")
+                raise RuntimeError(_("KataGo error: %s") % obj['error'])
             if "warning" in obj:
-                self.log(f"KataGo warning: {obj['warning']}")
+                self.log(_("KataGo warning: %s") % obj['warning'])
                 continue
             return obj
 
@@ -305,12 +304,12 @@ class Analyzer:
     def katago_exit(self) -> int:
         """Stop KataGo and exit process."""
         if self.katago is None:
-            raise ValueError("KataGo is not running")
+            raise ValueError(_("KataGo is not running"))
         self.katago_stop()
         try:
             ret = self.katago.wait(10)
         except subprocess.TimeoutExpired as e:
-            raise RuntimeError("Unable to stop KataGo process") from e
+            raise RuntimeError(_("Unable to stop KataGo process")) from e
         self.katago = None
         return ret
 
@@ -336,7 +335,6 @@ class Analyzer:
             sum(self.weight_moves)
         cur_weight = self.cur_weight_komi + self.cur_weight_dead + \
             sum(self.cur_weight_moves)
-        print(total_weight, cur_weight)
         self.progress(cur_weight / total_weight)
 
     def calc_komi(self, init_komi: float) -> Tuple[float, float, float]:
@@ -407,9 +405,6 @@ class Analyzer:
                 if not obj.get("isDuringSearch", False):
                     break
             target_visits *= 2
-        print(move_obj["visits"], move_obj["utility"], move_obj["utilityLcb"],
-              abs(move_obj["utility"] - move_obj["utilityLcb"]),
-              move_obj["scoreLead"], move_obj["winrate"])
         lead = move_obj["scoreLead"]
         winrate = move_obj["winrate"]
         if not self.game_moves:
@@ -478,7 +473,6 @@ class Analyzer:
                     break
             target_visits *= 2
         self.update_progress()
-        print(move_obj["scoreLead"])
         res = move_obj['utility']
         radius = abs(move_obj["utility"] - move_obj["utilityLcb"])
         if self.colour == "W":
@@ -680,9 +674,8 @@ class MainFrame(wx.Frame):
     def __init__(self) -> None:
         """Construct main frame."""
         super().__init__(None, wx.ID_ANY,
-                         title="SGF Analyzer",
+                         title=_("SGF Analyzer"),
                          style=wx.DEFAULT_FRAME_STYLE | wx.TAB_TRAVERSAL)
-
         self.filename = None
         self.init_board = sgf_board.Board(19)
         self.moves = []
@@ -739,12 +732,12 @@ class MainFrame(wx.Frame):
             self.create_page_5(),
         ]
         self.titles = [
-            "Select SGF file",
-            "Select position",
-            "Select moves",
-            "Analysis settings",
-            "Confirm settings",
-            "Analyzing...",
+            _("Select SGF file"),
+            _("Select position"),
+            _("Select moves"),
+            _("Analysis settings"),
+            _("Confirm settings"),
+            _("Analyzing..."),
         ]
         self.page_loaders = [
             self.load_page_1,
@@ -767,14 +760,15 @@ class MainFrame(wx.Frame):
         content_sizer.Add(button_row, 0,
                           wx.ALIGN_RIGHT | wx.ALL, self.FromDIP(5))
 
-        self.back_btn = wx.Button(self.main_panel, wx.ID_ANY, "< &Back")
+        self.back_btn = wx.Button(self.main_panel, wx.ID_ANY, _("< &Back"))
         button_row.Add(self.back_btn, 0, wx.ALL | wx.EXPAND, self.FromDIP(5))
 
-        self.next_btn = wx.Button(self.main_panel, wx.ID_ANY, "&Next >")
+        self.next_btn = wx.Button(self.main_panel, wx.ID_ANY, _("&Next >"))
         self.next_btn.SetDefault()
         button_row.Add(self.next_btn, 0, wx.ALL | wx.EXPAND, self.FromDIP(5))
 
-        self.cancel_btn = wx.Button(self.main_panel, wx.ID_CANCEL, "&Cancel")
+        self.cancel_btn = wx.Button(self.main_panel, wx.ID_CANCEL,
+                                    _("&Cancel"))
         button_row.Add(self.cancel_btn, 0, wx.ALL | wx.EXPAND, self.FromDIP(5))
 
         self.Bind(wx.EVT_BUTTON, self.on_back_click, self.back_btn)
@@ -796,14 +790,14 @@ class MainFrame(wx.Frame):
                         wx.ALIGN_CENTER_VERTICAL | wx.ALL, self.FromDIP(30))
 
         sgf_sel_label = wx.StaticText(
-            panel, wx.ID_ANY, "Select SGF file you wish to analyze")
+            panel, wx.ID_ANY, _("Select SGF file you wish to analyze"))
         content_sizer.Add(sgf_sel_label, 0,
                           wx.EXPAND | wx.ALL, self.FromDIP(5))
 
         self.sgf_selector = wx.FilePickerCtrl(
             panel, wx.ID_ANY, "",
-            message="Select SGF file",
-            wildcard="SGF Files (*.sgf)|*.sgf|All files|*.*",
+            message=_("Select SGF file"),
+            wildcard=_("SGF Files (*.sgf)|*.sgf|All files|*.*"),
             style=wx.FLP_USE_TEXTCTRL | wx.FLP_OPEN | wx.FLP_FILE_MUST_EXIST)
         content_sizer.Add(self.sgf_selector, 0,
                           wx.EXPAND | wx.ALL, self.FromDIP(5))
@@ -815,7 +809,8 @@ class MainFrame(wx.Frame):
         panel = wx.Panel(self.main_panel, wx.ID_ANY)
         board, colour, marks = self.calc_board()
         panel_sizer = wx.BoxSizer(wx.VERTICAL)
-        label = wx.StaticText(panel, wx.ID_ANY, "Select position to analyze")
+        label = wx.StaticText(panel, wx.ID_ANY,
+                              _("Select position to analyze"))
         panel_sizer.Add(label, 0,
                         wx.EXPAND | wx.LEFT | wx.RIGHT, self.FromDIP(10))
         self.board = Board(panel, board, colour, marks, wx.ID_ANY)
@@ -856,7 +851,7 @@ class MainFrame(wx.Frame):
         panel = wx.Panel(self.main_panel, wx.ID_ANY)
         panel_sizer = wx.BoxSizer(wx.VERTICAL)
         label = wx.StaticText(panel, wx.ID_ANY,
-                              "Select moves you wish to compare")
+                              _("Select moves you wish to compare"))
         panel_sizer.Add(label, 0,
                         wx.EXPAND | wx.LEFT | wx.RIGHT, self.FromDIP(10))
         self.sel_board = Board(panel, self.board.board, self.board.colour,
@@ -924,22 +919,23 @@ class MainFrame(wx.Frame):
                     if models_mac:
                         model_path = models_mac[0]
 
-        panel = wx.ScrolledWindow(self.main_panel, wx.ID_ANY)
+        panel = wx.ScrolledWindow(self.main_panel, wx.ID_ANY,
+                                  style=wx.TAB_TRAVERSAL)
         panel.SetScrollRate(0, self.FromDIP(10))
         panel_sizer = wx.BoxSizer(wx.VERTICAL)
         content_sizer = wx.BoxSizer(wx.VERTICAL)
         panel_sizer.Add(content_sizer, 1,
                         wx.EXPAND | wx.ALL, self.FromDIP(30))
-        label = wx.StaticText(panel, wx.ID_ANY, "Select KataGo executable")
+        label = wx.StaticText(panel, wx.ID_ANY, _("Select KataGo executable"))
         content_sizer.Add(label, 0,
                           wx.EXPAND | wx.LEFT | wx.RIGHT, self.FromDIP(5))
-        if platform.system() == "Windows":
-            exe_wildcard = "Executable (*.exe)|*.exe|All files|*.*"
+        if IS_WINDOWS:
+            exe_wildcard = _("Executable (*.exe)|*.exe|All files|*.*")
         else:
-            exe_wildcard = "All files|*.*"
+            exe_wildcard = _("All files|*.*")
         self.kata_selector = wx.FilePickerCtrl(
             panel, wx.ID_ANY, "",
-            message="Select KataGo executable",
+            message=_("Select KataGo executable"),
             wildcard=exe_wildcard,
             style=wx.FLP_USE_TEXTCTRL | wx.FLP_OPEN | wx.FLP_FILE_MUST_EXIST)
         self.kata_selector.GetTextCtrl().Value = katago_path
@@ -947,26 +943,26 @@ class MainFrame(wx.Frame):
                           wx.EXPAND | wx.ALL, self.FromDIP(5))
         label = wx.StaticText(
             panel, wx.ID_ANY,
-            "Select KataGo configuration (leave blank to use default)"
+            _("Select KataGo configuration (leave blank for default settings)")
         )
         content_sizer.Add(label, 0,
                           wx.EXPAND | wx.ALL, self.FromDIP(5))
         self.config_selector = wx.FilePickerCtrl(
             panel, wx.ID_ANY, "",
-            message="Select KataGo configuration",
-            wildcard=("KataGo model (*.cfg)|*.cfg;*.bin|All files|*.*"),
+            message=_("Select KataGo configuration"),
+            wildcard=_("KataGo model (*.cfg)|*.cfg;*.bin|All files|*.*"),
             style=wx.FLP_USE_TEXTCTRL | wx.FLP_OPEN | wx.FLP_FILE_MUST_EXIST)
         self.config_selector.GetTextCtrl().Value = config_path
         content_sizer.Add(self.config_selector, 0,
                           wx.EXPAND | wx.ALL, self.FromDIP(5))
-        label = wx.StaticText(panel, wx.ID_ANY, "Select KataGo model")
+        label = wx.StaticText(panel, wx.ID_ANY, _("Select KataGo model"))
         content_sizer.Add(label, 0,
                           wx.EXPAND | wx.ALL, self.FromDIP(5))
         self.model_selector = wx.FilePickerCtrl(
             panel, wx.ID_ANY, "",
-            message="Select KataGo model",
-            wildcard=("KataGo model (*.bin.gz;*.bin)|*.bin.gz;*.bin|" +
-                      "All files|*.*"),
+            message=_("Select KataGo model"),
+            wildcard=_("KataGo model (*.bin.gz;*.bin)|*.bin.gz;*.bin|"
+                       "All files|*.*"),
             style=wx.FLP_USE_TEXTCTRL | wx.FLP_OPEN | wx.FLP_FILE_MUST_EXIST)
         self.model_selector.GetTextCtrl().Value = model_path
         content_sizer.Add(self.model_selector, 0,
@@ -1038,8 +1034,8 @@ class MainFrame(wx.Frame):
             self.sel_move_idx = 0
             self.sel_moves = []
         except (OSError, ValueError):
-            wx.MessageBox("Failed to load SGF file", "Error", wx.ICON_ERROR,
-                          self)
+            wx.MessageBox(_("Failed to load SGF file"), _("Error"),
+                          wx.ICON_ERROR, self)
             return False
         return True
 
@@ -1070,16 +1066,18 @@ class MainFrame(wx.Frame):
                 or not os.path.exists(model_path) \
                 or not os.access(katago_path, os.X_OK):
             return False
-        confirm_text = f"SGF file\n\t{self.filename}\n\n"
-        confirm_text += f"Position:\n\tmove {self.move_idx}\n\n"
-        confirm_text += "Moves to compare:\n"
+        moves_str = ""
         for i, j in self.sel_moves:
-            confirm_text += f"\t{Board.LABELS[i]}{j + 1}\n"
-        confirm_text += "\n"
-        confirm_text += f"KataGo path\n\t{katago_path}\n\n"
-        confirm_text += f"KataGo config\n\t{config_path}\n\n"
-        confirm_text += f"Model path\n\t{model_path}\n\n"
-        self.confirm_textarea.Value = confirm_text
+            moves_str += f"\t{Board.LABELS[i]}{j + 1}\n"
+        self.confirm_textarea.Value = _(
+            "SGF file\n\t%s\n\n"
+            "Position\n\tmove %d\n\n"
+            "Moves to compare\n%s\n"
+            "KataGo path\n\t%s\n\n"
+            "KataGo config\n\t%s\n\n"
+            "Model path\n\t%s\n\n"
+        ) % (self.filename, self.move_idx, moves_str, katago_path, config_path,
+             model_path)
         return True
 
     def load_page_5(self) -> bool:
@@ -1139,7 +1137,7 @@ class MainFrame(wx.Frame):
         self.cancel_btn.Disable()
         self.next_btn.Enable()
         self.analyzer = None
-        self.title_label.SetLabelText("Analysis complete")
+        self.title_label.SetLabelText(_("Analysis complete"))
         if not aborted:
             wx.Bell()
 
@@ -1155,7 +1153,7 @@ class MainFrame(wx.Frame):
             total_str = wx.TimeSpan.Milliseconds(
                 int(total * 1000)).Format("%H:%M:%S")
             self.progress_label.SetLabelText(
-                f"Estimated time {elapsed_str} / {total_str}")
+                _("Estimated time %s / %s") % (elapsed_str, total_str))
 
         self.progress_bar.Value = int(progress * 100 + 0.5)
 
@@ -1170,11 +1168,11 @@ class MainFrame(wx.Frame):
         else:
             self.back_btn.Enable(self.current_page_idx != 0)
         if self.current_page_idx == 4:
-            self.next_btn.SetLabel("&Start")
+            self.next_btn.SetLabel(_("&Start"))
         elif self.current_page_idx == len(self.pages) - 1:
-            self.next_btn.SetLabel("&Finish")
+            self.next_btn.SetLabel(_("&Finish"))
         else:
-            self.next_btn.SetLabel("&Next >")
+            self.next_btn.SetLabel(_("&Next >"))
         self.title_label.SetLabelText(self.titles[self.current_page_idx])
         self.update_layout()
         if self.current_page_idx < 4:
@@ -1209,7 +1207,7 @@ class MainFrame(wx.Frame):
 
     def on_cancel_click(self, _evt) -> None:
         """Handle cancel button."""
-        if wx.MessageBox("Are you sure you want to cancel?", "Cancel",
+        if wx.MessageBox(_("Are you sure you want to cancel?"), _("Cancel"),
                          wx.YES_NO | wx.ICON_INFORMATION, self) != wx.YES:
             return
         if self.analyzer is not None:
@@ -1305,7 +1303,7 @@ class MainFrame(wx.Frame):
         """Update board."""
         board, colour, marks = self.calc_board()
         self.board.set_board(board, colour, marks)
-        self.board_move_label.SetLabelText(f"Move {self.move_idx}")
+        self.board_move_label.SetLabelText(_("Move %d") % (self.move_idx))
         self.update_layout()
 
     def update_sel_board(self) -> None:
@@ -1319,19 +1317,17 @@ class MainFrame(wx.Frame):
 class App(wx.App):
     """App class."""
 
-    # pylint: disable=invalid-name
-
-    def __init__(self) -> None:
-        """Construct app."""
-        super().__init__()
-        self.locale = None
+    # pylint: disable=invalid-name,attribute-defined-outside-init
 
     def OnInit(self) -> bool:
         """Init handler."""
         wx.StandardPaths.Get().SetFileLayout(wx.StandardPaths.FileLayout_XDG)
         self.locale = wx.Locale(wx.LANGUAGE_DEFAULT)
+        self.locale.AddCatalogLookupPathPrefix(
+            os.path.join(ROOT_DIR, "locale"))
+        self.locale.AddCatalog("KatagoFairCompare")
         self.SetAppName("KatagoFairCompare")
-        self.SetAppDisplayName("SGF Analyzer")
+        self.SetAppDisplayName(_("SGF Analyzer"))
         main_frame = MainFrame()
         self.SetTopWindow(main_frame)
         main_frame.Show()

@@ -1,0 +1,264 @@
+msgid ""
+msgstr ""
+"Language: ru\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: app.py:95
+msgid "Launching KataGo..."
+msgstr "Запуск KataGo..."
+
+#: app.py:100
+#, python-format
+msgid "KataGo %s is ready"
+msgstr "KataGo %s готова"
+
+#: app.py:103
+msgid "Calculating komi..."
+msgstr "Вычисляется коми..."
+
+#: app.py:118
+#, python-format
+msgid "Trying %.1f..."
+msgstr "Пробую %.1f..."
+
+#: app.py:122
+#, python-format
+msgid "Visits: %d; winrate: %.3f"
+msgstr "Посещений: %d; процент побед: %.3f"
+
+#: app.py:144
+#, python-format
+msgid "Komi: %.1f"
+msgstr "Коми: %.1f"
+
+#: app.py:149
+#, python-format
+msgid "Analyzing move %s..."
+msgstr "Анализ хода %s..."
+
+#: app.py:152
+#, python-format
+msgid "Result for %s: %.3f (radius: %.3f visits %d)"
+msgstr "Результат для %s: %.3f (радиус: %.3f, посещений %d)"
+
+#: app.py:160
+#, python-format
+msgid "KataGo exited with code %d"
+msgstr "KataGo завершилась с кодом %d"
+
+#: app.py:163
+msgid "Done"
+msgstr "Готово"
+
+#: app.py:165
+msgid "Results (higher is better):"
+msgstr "Результаты (больше - лучше):"
+
+#: app.py:167
+#, python-format
+msgid "%s: %.3f (radius %.3f)"
+msgstr "%s: %.3f (радиус %.3f)"
+
+#: app.py:170
+#, python-format
+msgid "Error: %s"
+msgstr "Ошибка: %s"
+
+#: app.py:257 app.py:306
+msgid "KataGo is not running"
+msgstr "KataGo не запущена"
+
+#: app.py:260
+msgid "Aborted"
+msgstr "Отменено"
+
+#: app.py:263
+#, python-format
+msgid "Unexpected termination: Error %d"
+msgstr "Неожиданное завершение: Ошибка %d"
+
+#: app.py:274
+msgid "Unknown response from KataGo"
+msgstr "Неизвестный ответ от KataGo"
+
+#: app.py:276
+#, fuzzy, python-format
+msgid "KataGo error: %s"
+msgstr "Ошибка KataGo: %s"
+
+#: app.py:278
+#, python-format
+msgid "KataGo warning: %s"
+msgstr "Предупреждение KataGo: %s"
+
+#: app.py:311
+msgid "Unable to stop KataGo process"
+msgstr "Не удалось остановить процесс KataGo"
+
+#: app.py:676 app.py:1334
+msgid "SGF Analyzer"
+msgstr "Анализатор SGF"
+
+#: app.py:735 app.py:799
+msgid "Select SGF file"
+msgstr "Выберите SGF-файл"
+
+#: app.py:736
+msgid "Select position"
+msgstr "Выберите позицию"
+
+#: app.py:737
+msgid "Select moves"
+msgstr "Выберите ходы"
+
+#: app.py:738
+msgid "Analysis settings"
+msgstr "Настройки анализа"
+
+#: app.py:739
+msgid "Confirm settings"
+msgstr "Подтвердить настройки"
+
+#: app.py:740
+msgid "Analyzing..."
+msgstr "Анализ..."
+
+#: app.py:763
+msgid "< &Back"
+msgstr "< &Назад"
+
+#: app.py:766 app.py:1174
+msgid "&Next >"
+msgstr "&Далее >"
+
+#: app.py:771
+msgid "&Cancel"
+msgstr "&Отмена"
+
+#: app.py:793
+msgid "Select SGF file you wish to analyze"
+msgstr "Выберите SGF-файл для анализа"
+
+#: app.py:800
+msgid "SGF Files (*.sgf)|*.sgf|All files|*.*"
+msgstr "Файлы SGF (*.sgf)|*.sgf|Все файлы|*.*"
+
+#: app.py:813
+msgid "Select position to analyze"
+msgstr "Выберите позицию для анализа"
+
+#: app.py:854
+msgid "Select moves you wish to compare"
+msgstr "Выберите ходы для сравнения"
+
+#: app.py:928 app.py:937
+msgid "Select KataGo executable"
+msgstr "Выберите исполняемый файл KataGo"
+
+#: app.py:932
+msgid "Executable (*.exe)|*.exe|All files|*.*"
+msgstr "Исполняемый файл (*.exe)|*.exe|Все файлы|*.*"
+
+#: app.py:934
+msgid "All files|*.*"
+msgstr "Все файлы|*.*"
+
+#: app.py:945
+msgid "Select KataGo configuration (leave blank for default settings)"
+msgstr ""
+"Выберите конфигурацию KataGo (оставьте пустым для настроек по умолчанию)"
+
+#: app.py:951
+msgid "Select KataGo configuration"
+msgstr "Выберите конфигурацию KataGo"
+
+#: app.py:952
+msgid "KataGo model (*.cfg)|*.cfg;*.bin|All files|*.*"
+msgstr "Модель KataGo (*.cfg)|*.cfg;*.bin|Все файлы|*.*"
+
+#: app.py:957 app.py:962
+msgid "Select KataGo model"
+msgstr "Выберите модель KataGo"
+
+#: app.py:963
+msgid "KataGo model (*.bin.gz;*.bin)|*.bin.gz;*.bin|All files|*.*"
+msgstr "Модель KataGo (*.bin.gz;*.bin)|*.bin.gz;*.bin|Все файлы|*.*"
+
+#: app.py:1036
+msgid "Failed to load SGF file"
+msgstr "Не удалось загрузить SGF-файл"
+
+#: app.py:1036
+msgid "Error"
+msgstr "Ошибка"
+
+#: app.py:1072
+#, python-format
+msgid ""
+"SGF file\n"
+"\t%s\n"
+"\n"
+"Position\n"
+"\tmove %d\n"
+"\n"
+"Moves to compare\n"
+"%s\n"
+"KataGo path\n"
+"\t%s\n"
+"\n"
+"KataGo config\n"
+"\t%s\n"
+"\n"
+"Model path\n"
+"\t%s\n"
+"\n"
+msgstr ""
+"SGF файл\n"
+"\t%s\n"
+"\n"
+"Позиция\n"
+"\tход %d\n"
+"\n"
+"Ходы для сравнения\n"
+"%s\n"
+"Путь к KataGo\n"
+"\t%s\n"
+"\n"
+"Конфигурация KataGo\n"
+"\t%s\n"
+"\n"
+"Путь к модели\n"
+"\t%s\n"
+"\n"
+
+#: app.py:1139
+msgid "Analysis complete"
+msgstr "Анализ завершён"
+
+#: app.py:1155
+#, python-format
+msgid "Estimated time %s / %s"
+msgstr "Расчетное время %s / %s"
+
+#: app.py:1170
+msgid "&Start"
+msgstr "&Начать"
+
+#: app.py:1172
+msgid "&Finish"
+msgstr "&Завершить"
+
+#: app.py:1209
+msgid "Are you sure you want to cancel?"
+msgstr "Вы уверены, что хотите отменить?"
+
+#: app.py:1209
+msgid "Cancel"
+msgstr "Отмена"
+
+#: app.py:1305
+#, python-format
+msgid "Move %d"
+msgstr "Ход %d"
