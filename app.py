@@ -114,14 +114,18 @@ class Analyzer:
                     coeffs = polyfit(list(komi_tries.keys()),
                                      list(komi_tries.values()),
                                      degree=1)
-                    komi = round(-coeffs[1] / coeffs[0] * 2) / 2
+                    if abs(coeffs[0]) < 0.001:
+                        komi = min(komi_tries,
+                                   key=lambda k: abs(komi_tries[k]))
+                    else:
+                        komi = round(-coeffs[1] / coeffs[0] * 2) / 2
                     break
                 self.log(_("Trying %.1f...") % komi)
                 self.weight_komi = 50000
                 diff, winrate, visits = self.calc_komi(komi)
                 komi_tries[komi] = winrate - 0.5
                 self.log(_("Visits: %d; winrate: %.3f") % (visits, winrate))
-                if abs(diff) < 0.5:
+                if (komi + diff) in komi_tries:
                     diff = 0.5 if winrate > 0.5 else -0.5
                 if len(komi_tries) > 1:
                     coeffs = polyfit(list(komi_tries.keys()),
@@ -344,24 +348,28 @@ class Analyzer:
         cur_visits = 0
         move_obj = {}
         if self.game_moves:
-            moves = self.game_moves[:-1]
             colour, move = self.game_moves[-1]
+            custom_settings = {
+                "moves": self.game_moves[:-1]
+            }
         else:
-            moves = []
-            init_komi = -init_komi
-            colour = self.colour
+            colour = "W" if self.colour == "B" else "B"
             move = "pass"
+            custom_settings = {
+                "moves": [],
+                "initialPlayer": colour,
+            }
         while self.cur_weight_komi < self.weight_komi:
             self.katago_send_command({
                 "id": "komi",
                 "initialStones": self.init_moves,
-                "moves": moves,
                 "rules": "chinese",
                 "komi": init_komi,
                 "boardXSize": 19,
                 "boardYSize": 19,
                 "maxVisits": target_visits,
                 "reportDuringSearchEvery": 1.0,
+                **custom_settings,
                 "allowMoves": [{
                     "player": colour,
                     "moves": [move],
@@ -407,9 +415,6 @@ class Analyzer:
             target_visits *= 2
         lead = move_obj["scoreLead"]
         winrate = move_obj["winrate"]
-        if not self.game_moves:
-            lead = -lead
-            winrate = 1.0 - winrate
         return round(lead * 2) / 2, winrate, cur_visits
 
     def analyze_move(self, move_idx: int, komi: float) -> \
