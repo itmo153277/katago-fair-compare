@@ -900,7 +900,7 @@ class MainFrame(wx.Frame):
                         wx.ALIGN_CENTER_VERTICAL | wx.ALL, self.FromDIP(30))
 
         sgf_sel_label = wx.StaticText(
-            panel, wx.ID_ANY, _("Select SGF file you wish to analyze"))
+            panel, wx.ID_ANY, _("Select SGF file to analyze"))
         content_sizer.Add(sgf_sel_label, 0,
                           wx.EXPAND | wx.ALL, self.FromDIP(5))
 
@@ -961,7 +961,7 @@ class MainFrame(wx.Frame):
         panel = wx.Panel(self.main_panel, wx.ID_ANY)
         panel_sizer = wx.BoxSizer(wx.VERTICAL)
         label = wx.StaticText(panel, wx.ID_ANY,
-                              _("Select moves you wish to compare"))
+                              _("Select moves to compare"))
         panel_sizer.Add(label, 0,
                         wx.EXPAND | wx.LEFT | wx.RIGHT, self.FromDIP(10))
         self.sel_board = Board(panel, self.board.board, self.board.colour,
@@ -1059,8 +1059,8 @@ class MainFrame(wx.Frame):
                           wx.EXPAND | wx.ALL, self.FromDIP(5))
         self.config_selector = wx.FilePickerCtrl(
             panel, wx.ID_ANY, "",
-            message=_("Select KataGo configuration"),
-            wildcard=_("KataGo model (*.cfg)|*.cfg;*.bin|All files|*.*"),
+            message=_("Select KataGo configuration file"),
+            wildcard=_("KataGo configuration (*.cfg)|*.cfg|All files|*.*"),
             style=wx.FLP_USE_TEXTCTRL | wx.FLP_OPEN | wx.FLP_FILE_MUST_EXIST)
         self.config_selector.GetTextCtrl().Value = config_path
         content_sizer.Add(self.config_selector, 0,
@@ -1096,8 +1096,8 @@ class MainFrame(wx.Frame):
                           wx.EXPAND | wx.ALL, self.FromDIP(5))
         label = wx.StaticText(
             panel, wx.ID_ANY,
-            _("Assumed komi (leave blank to calculate automatically "
-              "- recommended)"))
+            _("Assumed komi (leave blank to calculate automatically; "
+              "recommended)"))
         content_sizer.Add(label, 0,
                           wx.EXPAND | wx.ALL, self.FromDIP(5))
         self.komi_ctrl = NumberCtrl(panel, wx.ID_ANY, value=None,
@@ -1226,7 +1226,7 @@ class MainFrame(wx.Frame):
             "Model path\n\t%s\n\n\n"
             "Minimum weight\n\t%s\n\n"
             "Maximum radius\n\t%s\n\n"
-            "Komi\n\t%s\n\n"
+            "Komi\n\t%s"
         ) % (self.filename, self.move_idx, moves_str, katago_path, config_path,
              model_path, min_weight_str, max_radius_str, komi_str)
         return True
