@@ -3,11 +3,12 @@
 
 """App."""
 
-from typing import Tuple, List, Callable, Any
+from typing import Tuple, List, Callable, Any, Union
 import builtins
 import platform
 import sys
 import os
+import locale
 import time
 import json
 import threading
@@ -24,6 +25,16 @@ SYSTEM = platform.system()
 IS_WINDOWS = SYSTEM == "Windows"
 IS_MAC = SYSTEM == "Darwin"
 IS_FROZEN = getattr(sys, "frozen", False)
+
+
+def format_float(val: float, precision: int) -> str:
+    """Format float respecting locale."""
+    return locale.format_string(f"%.{precision}f", val)
+
+
+def parse_float(val: str, precision: int) -> float:
+    """Parse float respecting locale."""
+    return round(locale.atof(val), precision)
 
 
 def polyfit(x: List[float], y: List[float], degree: int) -> List[float]:
@@ -63,7 +74,10 @@ class Analyzer:
                  init_moves: List[Tuple[str, str]],
                  game_moves: List[Tuple[str, str]],
                  move_colour: str,
-                 moves: List[str]) -> None:
+                 moves: List[str],
+                 min_weight: float,
+                 max_radius: float,
+                 komi: Union[float, None]) -> None:
         """Construct analyzer."""
         self.log = log
         self.progress = progress
@@ -72,12 +86,15 @@ class Analyzer:
         self.game_moves = game_moves
         self.colour = move_colour
         self.moves = moves
-        self.weight_komi = 50000.0
-        self.cur_weight_komi = 0.0
-        self.weight_dead = 100000.0
-        self.cur_weight_dead = 0
-        self.weight_moves = [50000.0 for _ in moves]
-        self.cur_weight_moves = [0.0 for _ in moves]
+        self.min_weight = min_weight
+        self.max_radius = max_radius
+        self.komi = komi
+        self.weight = self.min_weight * (2 + len(moves))
+        if komi is not None:
+            self.weight -= min_weight * 2
+        self.weight_done = 0
+        self.target_weight = self.min_weight if komi is None else 0
+        self.cur_weight = 0.0
         self.aborted = False
         self.command_lock = threading.Lock()
         self.analysis_cond = threading.Condition()
@@ -101,60 +118,14 @@ class Analyzer:
             self.log(_("KataGo %s is ready") % ver)
             self.progress(0)
 
-            self.log(_("Calculating komi..."))
-            komi = self.calc_komi(0)[0]
-            self.weight_dead -= 50000
-            self.weight_dead += self.weight_komi
-            self.cur_weight_dead += self.cur_weight_komi
-            self.weight_komi = 0
-            self.cur_weight_komi = 0
-            komi_tries = {}
-            while True:
-                if komi in komi_tries:
-                    coeffs = polyfit(list(komi_tries.keys()),
-                                     list(komi_tries.values()),
-                                     degree=1)
-                    if abs(coeffs[0]) < 0.001:
-                        komi = min(komi_tries,
-                                   key=lambda k: abs(komi_tries[k]))
-                    else:
-                        komi = round(-coeffs[1] / coeffs[0] * 2) / 2
-                    break
-                self.log(_("Trying %.1f...") % komi)
-                self.weight_komi = 50000
-                diff, winrate, visits = self.calc_komi(komi)
-                komi_tries[komi] = winrate - 0.5
-                self.log(_("Visits: %d; winrate: %.3f") % (visits, winrate))
-                if (komi + diff) in komi_tries:
-                    step = 0.5 if winrate > 0.5 else -0.5
-                    diff = 0
-                    while True:
-                        diff += step
-                        val = komi_tries.get(komi + diff, None)
-                        if val is None:
-                            break
-                        if (winrate - 0.5) * val <= 0:
-                            break
-                if len(komi_tries) > 1:
-                    coeffs = polyfit(list(komi_tries.keys()),
-                                     list(komi_tries.values()),
-                                     degree=1)
-                    if abs(coeffs[0]) < 0.001:
-                        komi += diff
-                    else:
-                        new_komi = round(-coeffs[1] / coeffs[0] * 2) / 2
-                        if new_komi in komi_tries:
-                            komi += diff
-                        else:
-                            komi = new_komi
-                else:
-                    komi += diff
-                    self.weight_dead -= 50000
-                self.weight_dead += self.weight_komi
-                self.cur_weight_dead += self.cur_weight_komi
-                self.weight_komi = 0
-                self.cur_weight_komi = 0
-            self.log(_("Komi: %.1f") % komi)
+            if self.komi is not None:
+                self.log(_("Using provided komi: %s") %
+                         format_float(self.komi, 1))
+                komi = self.komi
+            else:
+                self.log(_("Calculating komi..."))
+                komi = self.calc_komi()
+                self.log(_("Komi: %s") % format_float(komi, 1))
 
             final_results = []
 
@@ -162,8 +133,9 @@ class Analyzer:
                 self.log(_("Analyzing move %s...") % move)
                 res, radius, visits, pv = self.analyze_move(move_idx, komi)
                 self.log(
-                    _("Result for %s: %.3f (radius: %.3f visits %d)") %
-                    (move, res * 100, radius * 100, visits)
+                    _("Result for %s: %s (radius: %s visits %d)") %
+                    (move, format_float(res * 100, 3),
+                     format_float(radius * 100, 3), visits)
                 )
                 self.log(f"PV: {pv}")
                 final_results.append((res, radius))
@@ -177,8 +149,9 @@ class Analyzer:
             self.log("")
             self.log(_("Results (higher is better):"))
             for move, (res, radius) in zip(self.moves, final_results):
-                self.log(_("%s: %.3f (radius %.3f)") %
-                         (move, res * 100, radius * 100))
+                self.log(_("%s: %s (radius %s)") %
+                         (move, format_float(res * 100, 3),
+                          format_float(radius * 100, 3)))
         except Exception as e:
             self.log(_("Error: %s") % e)
             raise
@@ -343,18 +316,66 @@ class Analyzer:
 
     def update_progress(self) -> None:
         """Update progress based on weight estimate."""
-        total_weight = self.weight_komi + self.weight_dead + \
-            sum(self.weight_moves)
-        cur_weight = self.cur_weight_komi + self.cur_weight_dead + \
-            sum(self.cur_weight_moves)
+        total_weight = self.target_weight + self.weight
+        cur_weight = self.cur_weight + self.weight_done
         self.progress(cur_weight / total_weight)
 
-    def calc_komi(self, init_komi: float) -> Tuple[float, float, float]:
+    def calc_komi(self) -> float:
         """Calculate real komi."""
+        komi = self.calc_komi_iter(0)[0]
+        komi_tries = {}
+        self.weight -= self.min_weight
+        while True:
+            if komi in komi_tries:
+                coeffs = polyfit(list(komi_tries.keys()),
+                                 list(komi_tries.values()),
+                                 degree=1)
+                if abs(coeffs[0]) < 0.001:
+                    komi = min(komi_tries,
+                               key=lambda k: abs(komi_tries[k]))
+                else:
+                    komi = round(-coeffs[1] / coeffs[0] * 2) / 2
+                break
+            self.log(_("Trying %s...") % format_float(komi, 1))
+            diff, winrate, visits = self.calc_komi_iter(komi)
+            komi_tries[komi] = winrate - 0.5
+            self.log(_("Visits: %d; winrate: %s") %
+                     (visits, format_float(winrate, 3)))
+            if (komi + diff) in komi_tries:
+                step = 0.5 if winrate > 0.5 else -0.5
+                diff = 0
+                while True:
+                    diff += step
+                    val = komi_tries.get(komi + diff, None)
+                    if val is None:
+                        break
+                    if (winrate - 0.5) * val <= 0:
+                        break
+            if len(komi_tries) > 1:
+                coeffs = polyfit(list(komi_tries.keys()),
+                                 list(komi_tries.values()),
+                                 degree=1)
+                if abs(coeffs[0]) < 0.001:
+                    komi += diff
+                else:
+                    new_komi = round(-coeffs[1] / coeffs[0] * 2) / 2
+                    if new_komi in komi_tries:
+                        komi += diff
+                    else:
+                        komi = new_komi
+            else:
+                komi += diff
+                self.weight -= self.min_weight
+        return komi
+
+    def calc_komi_iter(self, init_komi: float) -> Tuple[float, float, float]:
+        """Calculate metrics for komi."""
         target_visits = 1000000
-        min_weight = 5000.0
+        min_weight = self.min_weight / 5
         cur_visits = 0
         move_obj = {}
+        self.target_weight = self.min_weight
+        self.cur_weight = 0
         if self.game_moves:
             colour, move = self.game_moves[-1]
             custom_settings = {
@@ -367,7 +388,7 @@ class Analyzer:
                 "moves": [],
                 "initialPlayer": colour,
             }
-        while self.cur_weight_komi < self.weight_komi:
+        while self.cur_weight < self.target_weight:
             self.katago_send_command({
                 "id": "komi",
                 "initialStones": self.init_moves,
@@ -397,20 +418,16 @@ class Analyzer:
                 if not move_infos:
                     continue
                 move_obj = move_infos[0]
-                visits = move_obj["visits"]
+                visits = move_obj["edgeVisits"]
                 if visits < cur_visits:
                     self.update_progress()
                     continue
                 cur_visits = visits
-                self.cur_weight_komi = move_obj["weight"]
-                if self.cur_weight_komi >= min_weight:
+                self.cur_weight = move_obj["edgeWeight"]
+                if self.cur_weight >= min_weight:
                     radius = abs(move_obj["utility"] - move_obj["utilityLcb"])
-                    self.weight_komi = max(
-                        50000.0,
-                        self.recalculate_target_weight(
-                            radius, self.cur_weight_komi),
-                    )
-                if self.cur_weight_komi >= self.weight_komi \
+                    self.recalculate_target_weight(radius)
+                if self.cur_weight >= self.target_weight \
                         and obj.get("isDuringSearch", False):
                     self.katago_send_command({
                         "id": "komi_term",
@@ -423,17 +440,24 @@ class Analyzer:
             target_visits *= 2
         lead = move_obj["scoreLead"]
         winrate = move_obj["winrate"]
+        self.weight += self.target_weight
+        self.weight_done += self.cur_weight
+        self.target_weight = 0
+        self.cur_weight = 0
         return round(lead * 2) / 2, winrate, cur_visits
 
     def analyze_move(self, move_idx: int, komi: float) -> \
             Tuple[float, float, float, str]:
         """Analyze move."""
         target_visits = 1000000
-        min_weight = 5000.0
+        min_weight = self.min_weight / 5
         cur_visits = 0
         move_obj = {}
         proc_id = f"move-{move_idx}"
-        while self.cur_weight_moves[move_idx] < self.weight_moves[move_idx]:
+        self.weight -= self.min_weight
+        self.target_weight = self.min_weight
+        self.cur_weight = 0
+        while self.cur_weight < self.target_weight:
             self.katago_send_command({
                 "id": proc_id,
                 "initialStones": self.init_moves,
@@ -460,21 +484,16 @@ class Analyzer:
                 if not move_infos:
                     continue
                 move_obj = move_infos[0]
-                visits = move_obj["visits"]
+                visits = move_obj["edgeVisits"]
                 if visits < cur_visits:
                     self.update_progress()
                     continue
                 cur_visits = visits
-                self.cur_weight_moves[move_idx] = move_obj["weight"]
-                if self.cur_weight_moves[move_idx] >= min_weight:
+                self.cur_weight = move_obj["edgeWeight"]
+                if self.cur_weight >= min_weight:
                     radius = abs(move_obj["utility"] - move_obj["utilityLcb"])
-                    self.weight_moves[move_idx] = max(
-                        50000.0,
-                        self.recalculate_target_weight(
-                            radius, self.cur_weight_moves[move_idx])
-                    )
-                if self.cur_weight_moves[move_idx] >= \
-                        self.weight_moves[move_idx] \
+                    self.recalculate_target_weight(radius)
+                if self.cur_weight >= self.target_weight \
                         and obj.get("isDuringSearch", False):
                     self.katago_send_command({
                         "id": f"{proc_id}_term",
@@ -490,16 +509,20 @@ class Analyzer:
         radius = abs(move_obj["utility"] - move_obj["utilityLcb"])
         if self.colour == "W":
             res = -res
+        self.weight += self.target_weight
+        self.weight_done += self.cur_weight
+        self.target_weight = 0
+        self.cur_weight = 0
         return res, radius, cur_visits, " ".join(move_obj["pv"])
 
-    def recalculate_target_weight(self, radius: float, weight: float) -> float:
+    def recalculate_target_weight(self, radius: float) -> None:
         """Recalculate target weight for progress bar."""
-        target_radius = 0.005
-        scale = radius / target_radius
-        if scale < 1:
-            return weight
-        else:
-            return weight * scale * scale
+        scale = radius / self.max_radius
+        self.target_weight = max([
+            self.cur_weight,
+            self.cur_weight * scale * scale,
+            self.min_weight
+        ])
 
 
 class Board(wx.Control):
@@ -679,6 +702,80 @@ class Board(wx.Control):
             x = int(pad_left + space_size * 2 + row_size * (i + 1.5))
             y = int(pad_top + space_size + row_size * (18 - j + 0.5))
             dc.DrawCircle(x, y, mark_size)
+
+
+class NumberCtrl(wx.TextCtrl):
+    """Number control class."""
+
+    def __init__(self, parent, id, value: Union[float, None],
+                 *args,
+                 precision: int = 0, allow_none: bool = False,
+                 min_val: Union[float, None] = None,
+                 max_val: Union[float, None] = None,
+                 custom_fmt: Union[Callable[[float], float], None] = None,
+                 **kwargs) -> None:
+        """Construct number control."""
+        super().__init__(parent, id, NumberCtrl.format_value(
+            value=value,
+            precision=precision,
+            allow_none=allow_none,
+            min_val=min_val,
+            max_val=max_val,
+            custom_fmt=custom_fmt,
+        ), *args, **kwargs)
+        self.precision = precision
+        self.allow_none = allow_none
+        self.min_val = min_val
+        self.max_val = max_val
+        self.custom_fmt = custom_fmt
+        self.Bind(wx.EVT_KILL_FOCUS, self.handle_blur)
+
+    def get_raw_value(self) -> Union[float, None]:
+        """Get raw value."""
+        try:
+            return parse_float(self.Value, self.precision)
+        except ValueError:
+            return None
+
+    def reformat_value(self) -> None:
+        """Reformat current value."""
+        self.Value = NumberCtrl.format_value(
+            value=self.get_raw_value(),
+            precision=self.precision,
+            allow_none=self.allow_none,
+            min_val=self.min_val,
+            max_val=self.max_val,
+            custom_fmt=self.custom_fmt,
+        )
+
+    def get_number_value(self) -> Union[None, float]:
+        """Get number value."""
+        self.reformat_value()
+        return self.get_raw_value()
+
+    def handle_blur(self, event: wx.Event) -> None:
+        """Handle blur event."""
+        self.reformat_value()
+        event.Skip()
+
+    @staticmethod
+    def format_value(value: Union[float, None], precision: int,
+                     allow_none: bool, min_val: Union[float, None],
+                     max_val: Union[float, None],
+                     custom_fmt: Union[Callable[[float], float], None]) -> str:
+        """Format value."""
+        if value is None:
+            if not allow_none:
+                value = min_val if min_val is not None else 0
+            else:
+                return ""
+        if min_val is not None:
+            value = max(value, min_val)
+        if max_val is not None:
+            value = min(value, max_val)
+        if custom_fmt is not None:
+            value = custom_fmt(value)
+        return format_float(value, precision)
 
 
 class MainFrame(wx.Frame):
@@ -980,6 +1077,35 @@ class MainFrame(wx.Frame):
         self.model_selector.GetTextCtrl().Value = model_path
         content_sizer.Add(self.model_selector, 0,
                           wx.EXPAND | wx.ALL, self.FromDIP(5))
+        content_sizer.Add(self.FromDIP(wx.Size(0, 30)), 0, wx.EXPAND, 0)
+        label = wx.StaticText(panel, wx.ID_ANY, _("Minimum weight"))
+        content_sizer.Add(label, 0,
+                          wx.EXPAND | wx.ALL, self.FromDIP(5))
+        self.min_weight_ctrl = NumberCtrl(panel, wx.ID_ANY, value=50000,
+                                          precision=2, allow_none=False,
+                                          min_val=0, max_val=None)
+        content_sizer.Add(self.min_weight_ctrl, 0,
+                          wx.EXPAND | wx.ALL, self.FromDIP(5))
+        label = wx.StaticText(panel, wx.ID_ANY, _("Maximum radius"))
+        content_sizer.Add(label, 0,
+                          wx.EXPAND | wx.ALL, self.FromDIP(5))
+        self.max_radius_ctrl = NumberCtrl(panel, wx.ID_ANY, value=0.5,
+                                          precision=3, allow_none=False,
+                                          min_val=0, max_val=None)
+        content_sizer.Add(self.max_radius_ctrl, 0,
+                          wx.EXPAND | wx.ALL, self.FromDIP(5))
+        label = wx.StaticText(
+            panel, wx.ID_ANY,
+            _("Assumed komi (leave blank to calculate automatically "
+              "- recommended)"))
+        content_sizer.Add(label, 0,
+                          wx.EXPAND | wx.ALL, self.FromDIP(5))
+        self.komi_ctrl = NumberCtrl(panel, wx.ID_ANY, value=None,
+                                    precision=1, allow_none=True,
+                                    min_val=None, max_val=None,
+                                    custom_fmt=lambda x: round(x * 2) / 2)
+        content_sizer.Add(self.komi_ctrl, 0,
+                          wx.EXPAND | wx.ALL, self.FromDIP(5))
         panel.SetSizer(panel_sizer)
         return panel  # type: ignore
 
@@ -1079,18 +1205,30 @@ class MainFrame(wx.Frame):
                 or not os.path.exists(model_path) \
                 or not os.access(katago_path, os.X_OK):
             return False
+        min_weight = self.min_weight_ctrl.get_number_value()
+        max_radius = self.max_radius_ctrl.get_number_value()
+        komi = self.komi_ctrl.get_number_value()
+        if not min_weight or not max_radius:
+            return False
         moves_str = ""
         for i, j in self.sel_moves:
             moves_str += f"\t{Board.LABELS[i]}{j + 1}\n"
+        min_weight_str = format_float(min_weight, 2)
+        max_radius_str = format_float(max_radius, 3)
+        komi_str = (format_float(komi, 1) if komi is not None
+                    else _("Automatic komi"))
         self.confirm_textarea.Value = _(
             "SGF file\n\t%s\n\n"
             "Position\n\tmove %d\n\n"
-            "Moves to compare\n%s\n"
+            "Moves to compare\n%s\n\n"
             "KataGo path\n\t%s\n\n"
             "KataGo config\n\t%s\n\n"
-            "Model path\n\t%s\n\n"
+            "Model path\n\t%s\n\n\n"
+            "Minimum weight\n\t%s\n\n"
+            "Maximum radius\n\t%s\n\n"
+            "Komi\n\t%s\n\n"
         ) % (self.filename, self.move_idx, moves_str, katago_path, config_path,
-             model_path)
+             model_path, min_weight_str, max_radius_str, komi_str)
         return True
 
     def load_page_5(self) -> bool:
@@ -1122,6 +1260,11 @@ class MainFrame(wx.Frame):
         moves = []
         for i, j in self.sel_moves:
             moves.append(f"{Board.LABELS[i]}{j + 1}")
+        min_weight = self.min_weight_ctrl.get_number_value()
+        max_radius = self.max_radius_ctrl.get_number_value()
+        komi = self.komi_ctrl.get_number_value()
+        assert min_weight is not None
+        assert max_radius is not None
         self.analyzer = Analyzer(
             log=lambda msg: wx.CallAfter(self.analyzer_log, msg),
             progress=lambda progress: wx.CallAfter(
@@ -1134,6 +1277,9 @@ class MainFrame(wx.Frame):
             game_moves=game_moves,
             move_colour=self.sel_board.colour.upper(),
             moves=moves,
+            min_weight=min_weight,
+            max_radius=max_radius / 100,
+            komi=komi,
         )
         return True
 
@@ -1339,8 +1485,8 @@ class App(wx.App):
         self.locale.AddCatalogLookupPathPrefix(
             os.path.join(ROOT_DIR, "locale"))
         self.locale.AddCatalog("KatagoFairCompare")
+        locale.setlocale(locale.LC_ALL, "")
         self.SetAppName("KatagoFairCompare")
-        self.SetAppDisplayName(_("SGF Analyzer"))
         main_frame = MainFrame()
         self.SetTopWindow(main_frame)
         main_frame.Show()
