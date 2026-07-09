@@ -1049,7 +1049,7 @@ class MainFrame(wx.Frame):
             message=_("Select KataGo executable"),
             wildcard=exe_wildcard,
             style=wx.FLP_USE_TEXTCTRL | wx.FLP_OPEN | wx.FLP_FILE_MUST_EXIST)
-        self.kata_selector.GetTextCtrl().Value = katago_path
+        self.kata_selector.Path = katago_path
         content_sizer.Add(self.kata_selector, 0,
                           wx.EXPAND | wx.ALL, self.FromDIP(5))
         label = wx.StaticText(
@@ -1063,7 +1063,7 @@ class MainFrame(wx.Frame):
             message=_("Select KataGo configuration file"),
             wildcard=_("KataGo configuration (*.cfg)|*.cfg|All files|*.*"),
             style=wx.FLP_USE_TEXTCTRL | wx.FLP_OPEN | wx.FLP_FILE_MUST_EXIST)
-        self.config_selector.GetTextCtrl().Value = config_path
+        self.config_selector.Path = config_path
         content_sizer.Add(self.config_selector, 0,
                           wx.EXPAND | wx.ALL, self.FromDIP(5))
         label = wx.StaticText(panel, wx.ID_ANY, _("Select KataGo model"))
@@ -1075,7 +1075,7 @@ class MainFrame(wx.Frame):
             wildcard=_("KataGo model (*.bin.gz;*.bin)|*.bin.gz;*.bin|"
                        "All files|*.*"),
             style=wx.FLP_USE_TEXTCTRL | wx.FLP_OPEN | wx.FLP_FILE_MUST_EXIST)
-        self.model_selector.GetTextCtrl().Value = model_path
+        self.model_selector.Path = model_path
         content_sizer.Add(self.model_selector, 0,
                           wx.EXPAND | wx.ALL, self.FromDIP(5))
         content_sizer.Add(self.FromDIP(wx.Size(0, 30)), 0, wx.EXPAND, 0)
@@ -1153,7 +1153,7 @@ class MainFrame(wx.Frame):
 
     def load_page_1(self) -> bool:
         """Load page 1."""
-        filename = self.sgf_selector.GetTextCtrl().Value
+        filename = self.sgf_selector.Path
         if not filename:
             return False
         if filename == self.filename:
@@ -1195,9 +1195,9 @@ class MainFrame(wx.Frame):
 
     def load_page_4(self) -> bool:
         """Load page 4."""
-        katago_path = self.kata_selector.GetTextCtrl().Value
-        config_path = self.config_selector.GetTextCtrl().Value
-        model_path = self.model_selector.GetTextCtrl().Value
+        katago_path = self.kata_selector.Path
+        config_path = self.config_selector.Path
+        model_path = self.model_selector.Path
         if not config_path:
             config_path = os.path.join(DATA_DIR, "config.cfg")
         if not katago_path or not config_path or not model_path \
@@ -1234,9 +1234,9 @@ class MainFrame(wx.Frame):
 
     def load_page_5(self) -> bool:
         """Load page 5."""
-        katago_path = self.kata_selector.GetTextCtrl().Value
-        config_path = self.config_selector.GetTextCtrl().Value
-        model_path = self.model_selector.GetTextCtrl().Value
+        katago_path = self.kata_selector.Path
+        config_path = self.config_selector.Path
+        model_path = self.model_selector.Path
         self.config.Write("EnginePath", katago_path)
         self.config.Write("ConfigPath", config_path)
         self.config.Write("ModelPath", model_path)
