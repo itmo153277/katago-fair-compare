@@ -45,15 +45,16 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["wx.adv", "wx.html"],
+    excludes=["wx.adv", "wx.html", "wx.msw"],
     noarchive=False,
     optimize=0,
 )
 pyz = PYZ(a.pure)
 
 if IS_WINDOWS or IS_MAC:
+    icon_resource = os.path.join("resources", "icon.png")
     datas = [x for x in a.datas
-             if x[0] != "resources/icon.png"]
+             if x[0] != icon_resource]
 else:
     datas = a.datas
 
@@ -110,6 +111,7 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=[icon],
+    manifest="windows/manifest.xml" if IS_WINDOWS else None,
 )
 coll = COLLECT(
     exe,
