@@ -248,7 +248,7 @@ class Analyzer:
                         raise RuntimeError(
                             _("Unexpected termination: Error %d") % ret)
                     if self.analysis_exit:
-                        katago.terminate()
+                        katago.kill()
                         time.sleep(0)
                         continue
                     if self.analysis_results:
@@ -284,7 +284,8 @@ class Analyzer:
             self.katago_stop()
             self.katago.wait(10)
         except (subprocess.TimeoutExpired, OSError):
-            self.katago.terminate()
+            self.katago.kill()
+            self.katago.wait()
         self.katago = None
 
     def katago_exit(self) -> int:
