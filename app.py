@@ -98,7 +98,7 @@ class Analyzer:
         self.aborted = False
         self.command_lock = threading.Lock()
         self.analysis_cond = threading.Condition()
-        self.analysis_result = None
+        self.analysis_results = []
         self.analysis_exit = False
         self.katago = None
         self.katago_path = katago_path
@@ -195,7 +195,7 @@ class Analyzer:
             return
         pipe = self.katago.stderr
         assert pipe is not None
-        for line in iter(pipe.readline, b''):
+        for line in iter(pipe.readline, b""):
             self.log(f"[KataGo] {line.decode('utf-8').rstrip()}")
         pipe.close()
 
@@ -207,13 +207,12 @@ class Analyzer:
         pipe = katago.stdout
         assert pipe is not None
         try:
-            for line in iter(pipe.readline, b''):
+            for line in iter(pipe.readline, b""):
                 with self.analysis_cond:
-                    self.analysis_result = json.loads(line)
+                    self.analysis_results.append(json.loads(line))
                     self.analysis_cond.notify_all()
         except Exception as e:
             self.log(f"Error parsing output from KataGo: {e}")
-            self.abort()
             raise e
         finally:
             pipe.close()
@@ -226,14 +225,12 @@ class Analyzer:
         katago = self.katago
         if katago is None:
             return
-        if katago.returncode is not None:
-            return
         with self.command_lock:
             pipe = katago.stdin
             assert pipe is not None
             if not pipe.closed:
                 pipe.write(json.dumps(command).encode())
-                pipe.write(b'\n')
+                pipe.write(b"\n")
                 pipe.flush()
 
     def katago_wait_output(self) -> Any:
@@ -242,20 +239,22 @@ class Analyzer:
         if katago is None:
             raise ValueError(_("KataGo is not running"))
         while True:
-            if self.aborted:
-                raise RuntimeError(_("Aborted"))
-            ret = katago.poll()
-            if ret is not None:
-                raise RuntimeError(_("Unexpected termination: Error %d") % ret)
             with self.analysis_cond:
-                if self.analysis_exit:
-                    continue
-                if self.analysis_result is None:
-                    self.analysis_cond.wait()
-                    if self.analysis_result is None:
+                while True:
+                    if self.aborted:
+                        raise RuntimeError(_("Aborted"))
+                    ret = katago.poll()
+                    if ret is not None:
+                        raise RuntimeError(
+                            _("Unexpected termination: Error %d") % ret)
+                    if self.analysis_exit:
+                        katago.terminate()
+                        time.sleep(0)
                         continue
-                obj = self.analysis_result
-                self.analysis_result = None
+                    if self.analysis_results:
+                        break
+                    self.analysis_cond.wait()
+                obj = self.analysis_results.pop(0)
             if not isinstance(obj, dict):
                 raise ValueError(_("Unknown response from KataGo"))
             if "error" in obj:
@@ -270,6 +269,8 @@ class Analyzer:
         katago = self.katago
         if katago is None:
             return
+        if katago.returncode is not None:
+            return
         self.katago_send_command({"id": "term", "action": "terminate_all"})
         with self.command_lock:
             assert katago.stdin is not None
@@ -279,10 +280,10 @@ class Analyzer:
         """Terminate KataGo."""
         if self.katago is None:
             return
-        self.katago_stop()
         try:
+            self.katago_stop()
             self.katago.wait(10)
-        except subprocess.TimeoutExpired:
+        except (subprocess.TimeoutExpired, OSError):
             self.katago.terminate()
         self.katago = None
 
@@ -506,7 +507,7 @@ class Analyzer:
                     break
             target_visits *= 2
         self.update_progress()
-        res = move_obj['utility']
+        res = move_obj["utility"]
         radius = abs(move_obj["utility"] - move_obj["utilityLcb"])
         if self.colour == "W":
             res = -res
