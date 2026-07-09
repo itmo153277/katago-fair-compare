@@ -330,11 +330,12 @@ class Analyzer:
                 coeffs = polyfit(list(komi_tries.keys()),
                                  list(komi_tries.values()),
                                  degree=1)
-                if abs(coeffs[0]) < 0.001:
-                    komi = min(komi_tries,
-                               key=lambda k: abs(komi_tries[k]))
-                else:
+                if abs(coeffs[0]) >= 0.001:
                     komi = round(-coeffs[1] / coeffs[0] * 2) / 2
+                    if komi in komi_tries:
+                        break
+                komi = min(komi_tries,
+                           key=lambda k: abs(komi_tries[k]))
                 break
             self.log(_("Trying %s...") % format_float(komi, 1))
             diff, winrate, visits = self.calc_komi_iter(komi)
@@ -359,7 +360,7 @@ class Analyzer:
                     komi += diff
                 else:
                     new_komi = round(-coeffs[1] / coeffs[0] * 2) / 2
-                    if new_komi in komi_tries:
+                    if abs(new_komi - komi) > 5 or new_komi in komi_tries:
                         komi += diff
                     else:
                         komi = new_komi
@@ -1102,7 +1103,7 @@ class MainFrame(wx.Frame):
                           wx.EXPAND | wx.ALL, self.FromDIP(5))
         self.komi_ctrl = NumberCtrl(panel, wx.ID_ANY, value=None,
                                     precision=1, allow_none=True,
-                                    min_val=None, max_val=None,
+                                    min_val=-150, max_val=150,
                                     custom_fmt=lambda x: round(x * 2) / 2)
         content_sizer.Add(self.komi_ctrl, 0,
                           wx.EXPAND | wx.ALL, self.FromDIP(5))
