@@ -1,7 +1,7 @@
 [Desktop Entry]
 Name=KataGo Fair Compare
-Exec=app
-Icon=app
+Exec=katago-fair-compare
+Icon=katago-fair-compare
 Type=Application
 Terminal=false
 Categories=Utility;Game;
