@@ -3,7 +3,7 @@
 
 """App."""
 
-from typing import Tuple, List, Callable, Any, Union
+from typing import Tuple, List, Dict, Callable, Any, Union
 import builtins
 import platform
 import sys
@@ -89,9 +89,9 @@ class Analyzer:
         self.min_weight = min_weight
         self.max_radius = max_radius
         self.komi = komi
-        self.weight = self.min_weight * (2 + len(moves))
-        if komi is not None:
-            self.weight -= min_weight * 2
+        self.weight = self.min_weight * len(moves)
+        if komi is None:
+            self.weight += min_weight * 2
         self.weight_done = 0
         self.target_weight = self.min_weight if komi is None else 0
         self.cur_weight = 0.0
@@ -172,9 +172,10 @@ class Analyzer:
                 "-model", self.model_path,
                 "-config", self.config_path,
                 "-override-config",
-                "reportAnalysisWinratesAs=BLACK, "
-                "numSearchThreads=1, "
-                "useNoisePruning=false",
+                "reportAnalysisWinratesAs=BLACK,"
+                "numSearchThreads=1,"
+                "useNoisePruning=false,"
+                "wideRootNoise=0",
             ],
             stderr=subprocess.PIPE,
             stdout=subprocess.PIPE,
@@ -344,16 +345,6 @@ class Analyzer:
             komi_tries[komi] = winrate - 0.5
             self.log(_("Visits: %d; winrate: %s") %
                      (visits, format_float(winrate, 3)))
-            if (komi + diff) in komi_tries:
-                step = 0.5 if winrate > 0.5 else -0.5
-                diff = 0
-                while True:
-                    diff += step
-                    val = komi_tries.get(komi + diff, None)
-                    if val is None:
-                        break
-                    if (winrate - 0.5) * val <= 0:
-                        break
             if len(komi_tries) > 1:
                 coeffs = polyfit(list(komi_tries.keys()),
                                  list(komi_tries.values()),
@@ -369,7 +360,30 @@ class Analyzer:
             else:
                 komi += diff
                 self.weight -= self.min_weight
+            if komi in komi_tries:
+                komi = self.find_min_komi_edge(komi_tries) or komi
+            if komi in komi_tries:
+                komi = self.find_max_komi_edge(komi_tries) or komi
         return komi
+
+    def find_min_komi_edge(self, komi_tries: Dict[float, float]) \
+            -> Union[float, None]:
+        """Find komi edge."""
+        for k, v in sorted(komi_tries.items(), key=lambda x: x[0]):
+            if v < 0:
+                return k - 0.5
+        return None
+
+    def find_max_komi_edge(self, komi_tries: Dict[float, float]) \
+            -> Union[float, None]:
+        """Find opposite komi edge."""
+        new_komi = self.find_min_komi_edge({
+            -k: -v
+            for k, v in komi_tries.items()
+        })
+        if new_komi is not None:
+            return -new_komi
+        return None
 
     def calc_komi_iter(self, init_komi: float) -> Tuple[float, float, float]:
         """Calculate metrics for komi."""
@@ -710,7 +724,7 @@ class Board(wx.Control):
 class NumberCtrl(wx.TextCtrl):
     """Number control class."""
 
-    def __init__(self, parent, id, value: Union[float, None],
+    def __init__(self, parent, cid, value: Union[float, None],
                  *args,
                  precision: int = 0, allow_none: bool = False,
                  min_val: Union[float, None] = None,
@@ -718,7 +732,7 @@ class NumberCtrl(wx.TextCtrl):
                  custom_fmt: Union[Callable[[float], float], None] = None,
                  **kwargs) -> None:
         """Construct number control."""
-        super().__init__(parent, id, NumberCtrl.format_value(
+        super().__init__(parent, cid, NumberCtrl.format_value(
             value=value,
             precision=precision,
             allow_none=allow_none,
@@ -742,14 +756,14 @@ class NumberCtrl(wx.TextCtrl):
 
     def reformat_value(self) -> None:
         """Reformat current value."""
-        self.Value = NumberCtrl.format_value(
+        self.SetValue(NumberCtrl.format_value(
             value=self.get_raw_value(),
             precision=self.precision,
             allow_none=self.allow_none,
             min_val=self.min_val,
             max_val=self.max_val,
             custom_fmt=self.custom_fmt,
-        )
+        ))
 
     def get_number_value(self) -> Union[None, float]:
         """Get number value."""
@@ -1043,9 +1057,9 @@ class MainFrame(wx.Frame):
         content_sizer.Add(label, 0,
                           wx.EXPAND | wx.LEFT | wx.RIGHT, self.FromDIP(5))
         if IS_WINDOWS:
-            exe_wildcard = _("Executable (*.exe)|*.exe|All files|*.*")
+            exe_wildcard = _("Executable (*.exe)|*.exe|All files|*")
         else:
-            exe_wildcard = _("All files|*.*")
+            exe_wildcard = _("All files|*")
         self.kata_selector = wx.FilePickerCtrl(
             panel, wx.ID_ANY, "",
             message=_("Select KataGo executable"),
@@ -1063,7 +1077,7 @@ class MainFrame(wx.Frame):
         self.config_selector = wx.FilePickerCtrl(
             panel, wx.ID_ANY, "",
             message=_("Select KataGo configuration file"),
-            wildcard=_("KataGo configuration (*.cfg)|*.cfg|All files|*.*"),
+            wildcard=_("KataGo configuration (*.cfg)|*.cfg|All files|*"),
             style=wx.FLP_USE_TEXTCTRL | wx.FLP_OPEN | wx.FLP_FILE_MUST_EXIST)
         self.config_selector.Path = config_path
         content_sizer.Add(self.config_selector, 0,
@@ -1168,6 +1182,8 @@ class MainFrame(wx.Frame):
             root_node = game.get_root()
             if root_node.has_property("PL"):
                 self.first_to_move = root_node.get("PL")
+            elif root_node.has_property("HA"):
+                self.first_to_move = "w"
             else:
                 self.first_to_move = "b"
             self.move_idx = 0
@@ -1453,6 +1469,8 @@ class MainFrame(wx.Frame):
         else:
             next_colour = self.first_to_move
             marks = []
+        if self.move_idx < len(self.moves):
+            next_colour = self.moves[self.move_idx][0]
         board = self.init_board.copy()
         for colour, move in self.moves[:self.move_idx]:
             if move is None:
