@@ -119,7 +119,7 @@ class Analyzer:
             self.progress(0)
 
             self.log(_("Min weight: %s; max radius: %s") %
-                     (format_float(self.min_weight, 3),
+                     (format_float(self.min_weight, 2),
                       format_float(self.max_radius * 100, 3)))
 
             if self.komi is not None:
