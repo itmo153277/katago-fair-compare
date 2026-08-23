@@ -14,210 +14,224 @@ msgstr "Запуск KataGo..."
 msgid "KataGo %s is ready"
 msgstr "KataGo %s готова"
 
-#: app.py:122
+#: app.py:121
+#, python-format
+msgid "Min weight: %s; max radius: %s"
+msgstr "Мин. вес: %s; макс. радиус: %s"
+
+#: app.py:126
 #, python-format
 msgid "Using provided komi: %s"
 msgstr "Используется указанное коми: %s"
 
-#: app.py:126
+#: app.py:129
+msgid "Calculating offset..."
+msgstr "Вычисляется смещение..."
+
+#: app.py:132
 msgid "Calculating komi..."
 msgstr "Вычисляется коми..."
 
-#: app.py:128
+#: app.py:135
 #, python-format
-msgid "Komi: %s"
-msgstr "Коми: %s"
+msgid "Komi: %s; offset: %s"
+msgstr "Коми: %s; смещение: %s"
 
-#: app.py:133
+#: app.py:138
 #, python-format
-msgid "Analyzing move %s..."
-msgstr "Анализ хода %s..."
+msgid "Recommended radius: %s"
+msgstr "Рекомендуемый радиус: %s"
 
-#: app.py:136
+#: app.py:144
 #, python-format
-msgid "Result for %s: %s (radius: %s visits %d)"
-msgstr "Результат для %s: %s (радиус: %s, посещений %d)"
+msgid "Analyzing %s..."
+msgstr "Анализ %s..."
 
-#: app.py:145
+#: app.py:150
 #, python-format
 msgid "KataGo exited with code %d"
 msgstr "KataGo завершилась с кодом %d"
 
-#: app.py:148
+#: app.py:153
 msgid "Done"
 msgstr "Готово"
 
-#: app.py:150
-msgid "Results (higher is better):"
-msgstr "Результаты (больше - лучше):"
+#: app.py:155
+msgid "Results:"
+msgstr "Результаты:"
 
-#: app.py:152
+#: app.py:158
 #, python-format
-msgid "%s: %s (radius %s)"
-msgstr "%s: %s (радиус %s)"
+msgid "%s: %s (%s)"
+msgstr "%s: %s (%s)"
 
-#: app.py:156
+#: app.py:167
 #, python-format
-msgid "Error: %s"
-msgstr "Ошибка: %s"
+msgid "Error: %s: %s"
+msgstr "Ошибка: %s: %s"
 
-#: app.py:241 app.py:295
+#: app.py:252 app.py:306
 msgid "KataGo is not running"
 msgstr "KataGo не запущена"
 
-#: app.py:246
+#: app.py:257
 msgid "Aborted"
 msgstr "Отменено"
 
-#: app.py:250
+#: app.py:261
 #, python-format
 msgid "Unexpected termination: Error %d"
 msgstr "Неожиданное завершение: Ошибка %d"
 
-#: app.py:260
+#: app.py:271
 msgid "Unknown response from KataGo"
 msgstr "Неизвестный ответ от KataGo"
 
-#: app.py:262
+#: app.py:273
 #, python-format
 msgid "KataGo error: %s"
 msgstr "Ошибка KataGo: %s"
 
-#: app.py:264
+#: app.py:275
 #, python-format
 msgid "KataGo warning: %s"
 msgstr "Предупреждение KataGo: %s"
 
-#: app.py:300
+#: app.py:311
 msgid "Unable to stop KataGo process"
 msgstr "Не удалось остановить процесс KataGo"
 
-#: app.py:343
+#: app.py:355
 #, python-format
 msgid "Trying %s..."
 msgstr "Пробую %s..."
 
-#: app.py:346
+#: app.py:479
 #, python-format
-msgid "Visits: %d; winrate: %s"
-msgstr "Посещений: %d; процент побед: %s"
+msgid "Visits: %d; winrate: %s; lead: %s; best: %s"
+msgstr "Посещений: %d; процент побед: %s; перевес: %s; лучший ход: %s"
 
-#: app.py:805
+#: app.py:554
+#, python-format
+msgid "Result for %s: %s (radius: %s; visits: %d)"
+msgstr "Результат для %s: %s (радиус: %s; посещений: %d)"
+
+#: app.py:830
 msgid "SGF Analyzer"
 msgstr "Анализатор SGF"
 
-#: app.py:863 app.py:927
+#: app.py:888 app.py:952
 msgid "Select SGF file"
 msgstr "Выберите SGF-файл"
 
-#: app.py:864
+#: app.py:889
 msgid "Select position"
 msgstr "Выберите позицию"
 
-#: app.py:865
+#: app.py:890
 msgid "Select moves"
 msgstr "Выберите ходы"
 
-#: app.py:866
+#: app.py:891
 msgid "Analysis settings"
 msgstr "Настройки анализа"
 
-#: app.py:867
+#: app.py:892
 msgid "Confirm settings"
 msgstr "Подтвердить настройки"
 
-#: app.py:868
+#: app.py:893
 msgid "Analyzing..."
 msgstr "Анализ..."
 
-#: app.py:891
+#: app.py:916
 msgid "< &Back"
 msgstr "< &Назад"
 
-#: app.py:894 app.py:1354
+#: app.py:919 app.py:1381
 msgid "&Next >"
 msgstr "&Далее >"
 
-#: app.py:899
+#: app.py:924
 msgid "&Cancel"
 msgstr "&Отмена"
 
-#: app.py:921
+#: app.py:946
 msgid "Select SGF file to analyze"
 msgstr "Выберите SGF-файл для анализа"
 
-#: app.py:928
+#: app.py:953
 msgid "SGF Files (*.sgf)|*.sgf|All files|*.*"
 msgstr "Файлы SGF (*.sgf)|*.sgf|Все файлы|*.*"
 
-#: app.py:941
+#: app.py:966
 msgid "Select position to analyze"
 msgstr "Выберите позицию для анализа"
 
-#: app.py:982
+#: app.py:1007
 msgid "Select moves to compare"
 msgstr "Выберите ходы для сравнения"
 
-#: app.py:1057 app.py:1066
+#: app.py:1082 app.py:1091
 msgid "Select KataGo executable"
 msgstr "Выберите исполняемый файл KataGo"
 
-#: app.py:1061
+#: app.py:1086
 msgid "Executable (*.exe)|*.exe|All files|*"
 msgstr "Исполняемый файл (*.exe)|*.exe|Все файлы|*"
 
-#: app.py:1063
+#: app.py:1088
 msgid "All files|*"
 msgstr "Все файлы|*"
 
-#: app.py:1074
+#: app.py:1099
 msgid "Select KataGo configuration (leave blank for default settings)"
 msgstr ""
 "Выберите конфигурацию KataGo (оставьте пустым для настроек по умолчанию)"
 
-#: app.py:1080
+#: app.py:1105
 msgid "Select KataGo configuration file"
 msgstr "Выберите файл конфигурации KataGo"
 
-#: app.py:1081
+#: app.py:1106
 msgid "KataGo configuration (*.cfg)|*.cfg|All files|*"
 msgstr "Конфигурация KataGo (*.cfg)|*.cfg|Все файлы|*"
 
-#: app.py:1086 app.py:1091
+#: app.py:1111 app.py:1116
 msgid "Select KataGo model"
 msgstr "Выберите модель KataGo"
 
-#: app.py:1092
+#: app.py:1117
 msgid "KataGo model (*.bin.gz;*.bin)|*.bin.gz;*.bin|All files|*.*"
 msgstr "Модель KataGo (*.bin.gz;*.bin)|*.bin.gz;*.bin|Все файлы|*.*"
 
-#: app.py:1099
+#: app.py:1124
 msgid "Minimum weight"
 msgstr "Минимальный вес"
 
-#: app.py:1107
+#: app.py:1132
 msgid "Maximum radius"
 msgstr "Максимальный радиус"
 
-#: app.py:1117
+#: app.py:1142
 msgid "Assumed komi (leave blank to calculate automatically; recommended)"
 msgstr ""
 "Предполагаемое коми (оставьте пустым для автоматического вычисления; "
 "рекомендуется)"
 
-#: app.py:1196
+#: app.py:1223
 msgid "Failed to load SGF file"
 msgstr "Не удалось загрузить SGF-файл"
 
-#: app.py:1196
+#: app.py:1223
 msgid "Error"
 msgstr "Ошибка"
 
-#: app.py:1239
+#: app.py:1266
 msgid "Automatic komi"
 msgstr "Автоматическое коми"
 
-#: app.py:1241
+#: app.py:1268
 #, python-format
 msgid ""
 "SGF file\n"
@@ -276,32 +290,44 @@ msgstr ""
 "Коми\n"
 "\t%s"
 
-#: app.py:1319
+#: app.py:1346
 msgid "Analysis complete"
 msgstr "Анализ завершён"
 
-#: app.py:1335
+#: app.py:1362
 #, python-format
 msgid "Estimated time %s / %s"
 msgstr "Расчетное время %s / %s"
 
-#: app.py:1350
+#: app.py:1377
 msgid "&Start"
 msgstr "Н&ачать"
 
-#: app.py:1352
+#: app.py:1379
 msgid "&Finish"
 msgstr "&Завершить"
 
-#: app.py:1389
+#: app.py:1416
 msgid "Are you sure you want to cancel?"
 msgstr "Вы уверены, что хотите отменить?"
 
-#: app.py:1389
+#: app.py:1416
 msgid "Cancel"
 msgstr "Отмена"
 
-#: app.py:1487
+#: app.py:1488
+msgid "Save analysis log?"
+msgstr "Сохранить журнал анализа?"
+
+#: app.py:1488 app.py:1501
+msgid "Save"
+msgstr "Сохранить"
+
+#: app.py:1502
+msgid "Text files (*.txt)|*.txt|All files|*"
+msgstr "Текстовый файл (*.txt)|*.txt|Все файлы|*"
+
+#: app.py:1538
 #, python-format
 msgid "Move %d"
 msgstr "Ход %d"
