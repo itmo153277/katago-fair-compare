@@ -25,7 +25,7 @@ apt-get -y -qq install --no-install-recommends \
   librsvg2-common
 
 export PYENV_ROOT=/opt/pyenv
-git clone -q https://github.com/pyenv/pyenv.git $PYENV_ROOT -b v2.7.3 --depth 1
+git clone -q https://github.com/pyenv/pyenv.git $PYENV_ROOT --depth 1
 export PATH=$PATH:$PYENV_ROOT/bin:$PYENV_ROOT/shims
 pyenv install 3.14
 pyenv global 3.14
