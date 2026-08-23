@@ -118,27 +118,32 @@ class Analyzer:
             self.log(_("KataGo %s is ready") % ver)
             self.progress(0)
 
+            self.log(_("Min weight: %s; max radius: %s") %
+                     (format_float(self.min_weight, 3),
+                      format_float(self.max_radius * 100, 3)))
+
             if self.komi is not None:
                 self.log(_("Using provided komi: %s") %
                          format_float(self.komi, 1))
                 komi = self.komi
+                self.log(_("Calculating offset..."))
+                _diff, _winrate, offset = self.calc_komi_iter(komi)
             else:
                 self.log(_("Calculating komi..."))
-                komi = self.calc_komi()
-                self.log(_("Komi: %s") % format_float(komi, 1))
+                komi, offset = self.calc_komi()
+
+            self.log(_("Komi: %s; offset: %s") %
+                     (format_float(komi, 1),
+                      format_float(offset * 100, 3)))
+            self.log(_("Recommended radius: %s") %
+                     format_float(0.5 * (1 + offset) / 2, 3))
 
             final_results = []
 
             for move_idx, move in enumerate(self.moves):
-                self.log(_("Analyzing move %s...") % move)
-                res, radius, visits, pv = self.analyze_move(move_idx, komi)
-                self.log(
-                    _("Result for %s: %s (radius: %s visits %d)") %
-                    (move, format_float(res * 100, 3),
-                     format_float(radius * 100, 3), visits)
-                )
-                self.log(f"PV: {pv}")
-                final_results.append((res, radius))
+                self.log(_("Analyzing %s...") % move)
+                res = self.analyze_move(move_idx, komi)
+                final_results.append(res)
 
             ret = self.katago_exit()
             if ret != 0:
@@ -147,13 +152,19 @@ class Analyzer:
             self.progress(1.0)
             self.log(_("Done"))
             self.log("")
-            self.log(_("Results (higher is better):"))
-            for move, (res, radius) in zip(self.moves, final_results):
-                self.log(_("%s: %s (radius %s)") %
-                         (move, format_float(res * 100, 3),
-                          format_float(radius * 100, 3)))
+            self.log(_("Results:"))
+            for move, res in sorted(zip(self.moves, final_results),
+                                    key=lambda x: x[1][0]):
+                self.log(_("%s: %s (%s)") %
+                         (move,
+                          format_float(((res[0] - offset) /
+                                        (1 + offset) + 1) * 100, 3),
+                          format_float(res[1] * 100 *
+                                       (1 + offset + abs(1 + res[0])) /
+                                       (1 + offset) ** 2, 3)))
+
         except Exception as e:
-            self.log(_("Error: %s") % e)
+            self.log(_("Error: %s: %s") % (type(e).__name__, e))
             raise
         finally:
             self.katago_terminate()
@@ -323,10 +334,11 @@ class Analyzer:
         cur_weight = self.cur_weight + self.weight_done
         self.progress(cur_weight / total_weight)
 
-    def calc_komi(self) -> float:
+    def calc_komi(self) -> Tuple[float, float]:
         """Calculate real komi."""
         komi = self.calc_komi_iter(0)[0]
         komi_tries = {}
+        komi_util = {}
         self.weight -= self.min_weight
         while True:
             if komi in komi_tries:
@@ -341,10 +353,9 @@ class Analyzer:
                            key=lambda k: abs(komi_tries[k]))
                 break
             self.log(_("Trying %s...") % format_float(komi, 1))
-            diff, winrate, visits = self.calc_komi_iter(komi)
+            diff, winrate, util = self.calc_komi_iter(komi)
             komi_tries[komi] = winrate - 0.5
-            self.log(_("Visits: %d; winrate: %s") %
-                     (visits, format_float(winrate, 3)))
+            komi_util[komi] = util
             if len(komi_tries) > 1:
                 coeffs = polyfit(list(komi_tries.keys()),
                                  list(komi_tries.values()),
@@ -364,7 +375,7 @@ class Analyzer:
                 komi = self.find_min_komi_edge(komi_tries) or komi
             if komi in komi_tries:
                 komi = self.find_max_komi_edge(komi_tries) or komi
-        return komi
+        return komi, komi_util[komi]
 
     def find_min_komi_edge(self, komi_tries: Dict[float, float]) \
             -> Union[float, None]:
@@ -396,7 +407,8 @@ class Analyzer:
         if self.game_moves:
             colour, move = self.game_moves[-1]
             custom_settings = {
-                "moves": self.game_moves[:-1]
+                "moves": self.game_moves[:-1],
+                "initialPlayer": self.game_moves[0][0]
             }
         else:
             colour = "W" if self.colour == "B" else "B"
@@ -461,10 +473,15 @@ class Analyzer:
         self.weight_done += self.cur_weight
         self.target_weight = 0
         self.cur_weight = 0
-        return round(lead * 2) / 2, winrate, cur_visits
+        res = move_obj["utility"]
+        if self.colour == "W":
+            res = -res
+        self.log(_("Visits: %d; winrate: %s; lead: %s; best: %s") %
+                 (cur_visits, format_float(winrate, 3), format_float(lead, 3),
+                  move_obj["pv"][1]))
+        return round(lead * 2) / 2, winrate, res
 
-    def analyze_move(self, move_idx: int, komi: float) -> \
-            Tuple[float, float, float, str]:
+    def analyze_move(self, move_idx: int, komi: float) -> Tuple[float, float]:
         """Analyze move."""
         target_visits = 1000000
         min_weight = self.min_weight / 5
@@ -479,6 +496,9 @@ class Analyzer:
                 "id": proc_id,
                 "initialStones": self.init_moves,
                 "moves": self.game_moves,
+                "initialPlayer": (self.game_moves[0][0]
+                                  if self.game_moves
+                                  else self.colour),
                 "rules": "chinese",
                 "komi": komi,
                 "boardXSize": 19,
@@ -530,7 +550,13 @@ class Analyzer:
         self.weight_done += self.cur_weight
         self.target_weight = 0
         self.cur_weight = 0
-        return res, radius, cur_visits, " ".join(move_obj["pv"])
+        self.log(
+            _("Result for %s: %s (radius: %s; visits: %d)") %
+            (self.moves[move_idx], format_float(res * 100, 3),
+             format_float(radius * 100, 3), cur_visits)
+        )
+        self.log(f"PV: {' '.join(move_obj['pv'])}")
+        return res, radius
 
     def recalculate_target_weight(self, radius: float) -> None:
         """Recalculate target weight for progress bar."""
@@ -1178,6 +1204,8 @@ class MainFrame(wx.Frame):
             with open(filename, "rt", encoding="utf-8") as f:
                 game = sgf.Sgf_game.from_string(f.read())
 
+            if game.get_size() != 19:
+                raise ValueError(f"Invalid board size: {game.get_size()}")
             self.init_board, self.moves = sgf_moves.get_setup_and_moves(game)
             root_node = game.get_root()
             if root_node.has_property("PL"):
@@ -1386,7 +1414,7 @@ class MainFrame(wx.Frame):
     def on_cancel_click(self, _evt) -> None:
         """Handle cancel button."""
         if wx.MessageBox(_("Are you sure you want to cancel?"), _("Cancel"),
-                         wx.YES_NO | wx.ICON_INFORMATION, self) != wx.YES:
+                         wx.YES_NO | wx.ICON_QUESTION, self) != wx.YES:
             return
         if self.analyzer is not None:
             self.cancel_btn.Disable()
@@ -1450,12 +1478,36 @@ class MainFrame(wx.Frame):
 
     def on_close(self, event: wx.CloseEvent) -> None:
         """Handle window close."""
-        if self.analyzer is None:
+        if not event.CanVeto():
             event.Skip()
-        elif event.CanVeto():
+            return
+        if self.analyzer is not None:
             event.Veto()
-        else:
-            event.Skip()
+            return
+        if self.current_page_idx == len(self.pages) - 1:
+            res = wx.MessageBox(_("Save analysis log?"), _("Save"),
+                                wx.YES_NO | wx.CANCEL | wx.ICON_QUESTION,
+                                self)
+            if res == wx.CANCEL:
+                event.Veto()
+                return
+            if res == wx.YES:
+                assert self.filename is not None
+                with wx.FileDialog(
+                    self,
+                    defaultDir=os.path.dirname(self.filename),
+                    defaultFile=os.path.splitext(
+                        os.path.basename(self.filename))[0] + ".txt",
+                    message=_("Save"),
+                    wildcard=_("Text files (*.txt)|*.txt|All files|*"),
+                    style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT,
+                ) as dlg:
+                    if dlg.ShowModal() != wx.ID_OK:
+                        event.Veto()
+                        return
+                    with open(dlg.GetPath(), "wt", encoding="utf-8") as f:
+                        f.write(self.log_textarea.GetValue())
+        event.Skip()
 
     def calc_board(self) -> Tuple[sgf_board.Board, str, List[Tuple[int, int]]]:
         """Calculate board."""
