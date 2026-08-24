@@ -10,6 +10,7 @@ import sys
 import os
 import locale
 import time
+import math
 import json
 import threading
 import subprocess
@@ -127,16 +128,17 @@ class Analyzer:
                          format_float(self.komi, 1))
                 komi = self.komi
                 self.log(_("Calculating offset..."))
-                _diff, _winrate, offset = self.calc_komi_iter(komi)
+                _diff, _winrate, offset, ofs_radius = self.calc_komi_iter(komi)
             else:
                 self.log(_("Calculating komi..."))
-                komi, offset = self.calc_komi()
+                komi, offset, ofs_radius = self.calc_komi()
 
             self.log(_("Komi: %s; offset: %s") %
                      (format_float(komi, 1),
                       format_float(offset * 100, 3)))
             self.log(_("Recommended radius: %s") %
-                     format_float(0.5 * (1 + offset) / 2, 3))
+                     format_float(0.5 * (1 + offset) ** 2 /
+                                  math.sqrt(1 + (1 + offset) ** 2), 3))
 
             final_results = []
 
@@ -157,11 +159,12 @@ class Analyzer:
                                     key=lambda x: x[1][0]):
                 self.log(_("%s: %s (%s)") %
                          (move,
-                          format_float(((res[0] - offset) /
-                                        (1 + offset) + 1) * 100, 3),
-                          format_float(res[1] * 100 *
-                                       (1 + offset + abs(1 + res[0])) /
-                                       (1 + offset) ** 2, 3)))
+                          format_float((res[0] + 1) / (offset + 1) * 100, 3),
+                          format_float(math.sqrt(
+                              (res[1] / (1 + offset)) ** 2 +
+                              (ofs_radius * (1 + res[0]) /
+                               (1 + offset) ** 2) ** 2
+                          ) * 100, 3)))
 
         except Exception as e:
             self.log(_("Error: %s: %s") % (type(e).__name__, e))
@@ -334,11 +337,11 @@ class Analyzer:
         cur_weight = self.cur_weight + self.weight_done
         self.progress(cur_weight / total_weight)
 
-    def calc_komi(self) -> Tuple[float, float]:
+    def calc_komi(self) -> Tuple[float, float, float]:
         """Calculate real komi."""
         komi = self.calc_komi_iter(0)[0]
         komi_tries = {}
-        komi_util = {}
+        komi_data = {}
         self.weight -= self.min_weight
         while True:
             if komi in komi_tries:
@@ -353,9 +356,9 @@ class Analyzer:
                            key=lambda k: abs(komi_tries[k]))
                 break
             self.log(_("Trying %s...") % format_float(komi, 1))
-            diff, winrate, util = self.calc_komi_iter(komi)
+            diff, winrate, util, radius = self.calc_komi_iter(komi)
             komi_tries[komi] = winrate - 0.5
-            komi_util[komi] = util
+            komi_data[komi] = (util, radius)
             if len(komi_tries) > 1:
                 coeffs = polyfit(list(komi_tries.keys()),
                                  list(komi_tries.values()),
@@ -375,7 +378,7 @@ class Analyzer:
                 komi = self.find_min_komi_edge(komi_tries) or komi
             if komi in komi_tries:
                 komi = self.find_max_komi_edge(komi_tries) or komi
-        return komi, komi_util[komi]
+        return (komi,) + komi_data[komi]
 
     def find_min_komi_edge(self, komi_tries: Dict[float, float]) \
             -> Union[float, None]:
@@ -396,7 +399,8 @@ class Analyzer:
             return -new_komi
         return None
 
-    def calc_komi_iter(self, init_komi: float) -> Tuple[float, float, float]:
+    def calc_komi_iter(self, init_komi: float) \
+            -> Tuple[float, float, float, float]:
         """Calculate metrics for komi."""
         target_visits = 1000000
         min_weight = self.min_weight / 5
@@ -476,10 +480,11 @@ class Analyzer:
         res = move_obj["utility"]
         if self.colour == "W":
             res = -res
-        self.log(_("Visits: %d; winrate: %s; lead: %s; best: %s") %
-                 (cur_visits, format_float(winrate, 3), format_float(lead, 3),
+        self.log(_("Visits: %d; radius: %s; winrate: %s; lead: %s; best: %s") %
+                 (cur_visits, format_float(radius * 100, 3),
+                  format_float(winrate, 3), format_float(lead, 3),
                   move_obj["pv"][1]))
-        return round(lead * 2) / 2, winrate, res
+        return round(lead * 2) / 2, winrate, res, radius
 
     def analyze_move(self, move_idx: int, komi: float) -> Tuple[float, float]:
         """Analyze move."""
