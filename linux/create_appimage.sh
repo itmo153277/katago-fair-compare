@@ -19,6 +19,9 @@ done
 for file in $appdir/usr/lib/wx/*.so* ; do
 patchelf --set-rpath '$ORIGIN/..' $file
 done
+for file in $appdir/usr/lib/python3*/lib-dynload/*.so* ; do
+patchelf --set-rpath '$ORIGIN/../..' $file
+done
 
 DEPLOY_GTK_VERSION=3 \
 LDAI_OUTPUT=dist/katago-fair-compare.AppImage \
