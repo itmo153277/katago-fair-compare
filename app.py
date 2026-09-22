@@ -24,8 +24,36 @@ DATA_DIR = os.path.join(ROOT_DIR,  "resources")
 
 SYSTEM = platform.system()
 IS_WINDOWS = SYSTEM == "Windows"
+IS_LINUX = SYSTEM == "Linux"
 IS_MAC = SYSTEM == "Darwin"
 IS_FROZEN = getattr(sys, "frozen", False)
+
+GLOBAL_ENV = os.environ.copy()
+
+
+def fix_global_env() -> None:
+    """Fix global env for launching external programs."""
+
+    # pylint: disable=global-statement
+
+    global GLOBAL_ENV
+
+    if IS_LINUX:
+        if IS_FROZEN:
+            os.environ["LD_LIBRARY_PATH"] = \
+                os.environ.get("LD_LIBRARY_PATH_ORIG", "")
+            GLOBAL_ENV["LD_LIBRARY_PATH"] = os.environ["LD_LIBRARY_PATH"]
+        if "APPIMAGE" in GLOBAL_ENV:
+            del GLOBAL_ENV["APPIMAGE"]
+            for k, v in GLOBAL_ENV.items():
+                if k.startswith("APPIMAGE_ORIG_"):
+                    GLOBAL_ENV[k[14:]] = v
+            GLOBAL_ENV = {k: v for k, v in GLOBAL_ENV.items()
+                          if not k.startswith("APPIMAGE_ORIG_") and v}
+    elif IS_WINDOWS:
+        if IS_FROZEN:
+            import ctypes
+            ctypes.windll.kernel32.SetDllDirectoryW(None)  # type: ignore
 
 
 def format_float(val: float, precision: int) -> str:
@@ -194,6 +222,7 @@ class Analyzer:
             stderr=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stdin=subprocess.PIPE,
+            env=GLOBAL_ENV,
             creationflags=flags,
         )
         stderr_thread = threading.Thread(target=self.katago_log,
@@ -1144,7 +1173,7 @@ class MainFrame(wx.Frame):
                           wx.EXPAND | wx.ALL, self.FromDIP(5))
         label = wx.StaticText(
             panel, wx.ID_ANY,
-            _("Assumed komi (leave blank to calculate automatically; "
+            _("Assumed komi (leave blank to calculate automatically - "
               "recommended)"))
         content_sizer.Add(label, 0,
                           wx.EXPAND | wx.ALL, self.FromDIP(5))
@@ -1180,6 +1209,7 @@ class MainFrame(wx.Frame):
             panel, wx.ID_ANY,
             style=wx.GA_HORIZONTAL | wx.GA_SMOOTH | wx.GA_PROGRESS
         )
+        self.progress_bar.SetValue(0)
         panel_sizer.Add(self.progress_bar, 0,
                         wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM,
                         self.FromDIP(10))
@@ -1558,6 +1588,7 @@ class App(wx.App):
 
     def OnInit(self) -> bool:
         """Init handler."""
+        fix_global_env()
         wx.StandardPaths.Get().SetFileLayout(wx.StandardPaths.FileLayout_XDG)
         self.locale = wx.Locale(wx.LANGUAGE_DEFAULT)
         self.locale.AddCatalogLookupPathPrefix(

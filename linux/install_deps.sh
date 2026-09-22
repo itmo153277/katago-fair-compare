@@ -14,6 +14,7 @@ apt-get -y -qq install --no-install-recommends \
   make \
   cmake \
   file \
+  patchelf \
   gettext \
   libssl-dev \
   zlib1g-dev \
@@ -34,7 +35,7 @@ export LINUXDEPLOY_ROOT=/opt/linuxdeploy
 mkdir -p $LINUXDEPLOY_ROOT/bin
 curl -fsSL https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/linuxdeploy-x86_64.AppImage > $LINUXDEPLOY_ROOT/bin/linuxdeploy-x86_64.AppImage
 chmod +x $LINUXDEPLOY_ROOT/bin/linuxdeploy-x86_64.AppImage
-curl -fsSL https://raw.githubusercontent.com/itmo153277/linuxdeploy-plugin-gtk/4d63222943ca8640078f83a547c3dcc03f47c345/linuxdeploy-plugin-gtk.sh > $LINUXDEPLOY_ROOT/bin/linuxdeploy-plugin-gtk.sh
+curl -fsSL https://raw.githubusercontent.com/itmo153277/linuxdeploy-plugin-gtk/281dbe7415d0a2b9c7c08f15ff3d03ca57b76b56/linuxdeploy-plugin-gtk.sh > $LINUXDEPLOY_ROOT/bin/linuxdeploy-plugin-gtk.sh
 chmod +x $LINUXDEPLOY_ROOT/bin/linuxdeploy-plugin-gtk.sh
 cat > $LINUXDEPLOY_ROOT/bin/linuxdeploy << EOF
 #!/bin/bash

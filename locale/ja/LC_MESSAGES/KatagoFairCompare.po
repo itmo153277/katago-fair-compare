@@ -5,230 +5,230 @@ msgstr ""
 "Content-Type: text/plain; charset=utf-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: app.py:114
+#: app.py:142
 msgid "Launching KataGo..."
 msgstr "KataGoを起動しています..."
 
-#: app.py:119
+#: app.py:147
 #, python-format
 msgid "KataGo %s is ready"
 msgstr "KataGo %s の準備ができました"
 
-#: app.py:122
+#: app.py:150
 #, python-format
 msgid "Min weight: %s; max radius: %s"
 msgstr "最小重み: %s; 最大半径: %s"
 
-#: app.py:127
+#: app.py:155
 #, python-format
 msgid "Using provided komi: %s"
 msgstr "提供されたコミを使用しています: %s"
 
-#: app.py:130
+#: app.py:158
 msgid "Calculating offset..."
 msgstr "オフセットを計算しています..."
 
-#: app.py:133
+#: app.py:161
 msgid "Calculating komi..."
 msgstr "コミを計算しています..."
 
-#: app.py:136
+#: app.py:164
 #, python-format
 msgid "Komi: %s; offset: %s"
 msgstr "コミ: %s; オフセット: %s"
 
-#: app.py:139
+#: app.py:167
 #, python-format
 msgid "Recommended radius: %s"
 msgstr "推奨半径: %s"
 
-#: app.py:146
+#: app.py:174
 #, python-format
 msgid "Analyzing %s..."
 msgstr "%s を解析しています..."
 
-#: app.py:152
+#: app.py:180
 #, python-format
 msgid "KataGo exited with code %d"
 msgstr "KataGoはコード %d で終了しました"
 
-#: app.py:155
+#: app.py:183
 msgid "Done"
 msgstr "完了"
 
-#: app.py:157
+#: app.py:185
 msgid "Results:"
 msgstr "結果:"
 
-#: app.py:160
+#: app.py:188
 #, python-format
 msgid "%s: %s (%s)"
 msgstr "%s: %s (%s)"
 
-#: app.py:170
+#: app.py:198
 #, python-format
 msgid "Error: %s: %s"
 msgstr "エラー: %s: %s"
 
-#: app.py:255 app.py:309
+#: app.py:284 app.py:338
 msgid "KataGo is not running"
 msgstr "KataGoは実行されていません"
 
-#: app.py:260
+#: app.py:289
 msgid "Aborted"
 msgstr "中止されました"
 
-#: app.py:264
+#: app.py:293
 #, python-format
 msgid "Unexpected termination: Error %d"
 msgstr "予期しない終了: エラー %d"
 
-#: app.py:274
+#: app.py:303
 msgid "Unknown response from KataGo"
 msgstr "KataGoから不明な応答がありました"
 
-#: app.py:276
+#: app.py:305
 #, python-format
 msgid "KataGo error: %s"
 msgstr "KataGoエラー: %s"
 
-#: app.py:278
+#: app.py:307
 #, python-format
 msgid "KataGo warning: %s"
 msgstr "KataGo警告: %s"
 
-#: app.py:314
+#: app.py:343
 msgid "Unable to stop KataGo process"
 msgstr "KataGoプロセスを停止できません"
 
-#: app.py:358
+#: app.py:387
 #, python-format
 msgid "Trying %s..."
 msgstr "%s を試しています..."
 
-#: app.py:483
+#: app.py:512
 #, python-format
 msgid "Visits: %d; radius: %s; winrate: %s; lead: %s; best: %s"
 msgstr "訪問回数: %d; 半径: %s; 勝率: %s; リード: %s; 最善手: %s"
 
-#: app.py:559
+#: app.py:588
 #, python-format
 msgid "Result for %s: %s (radius: %s; visits: %d)"
 msgstr "%s の結果: %s (半径: %s; 訪問回数: %d)"
 
-#: app.py:835
+#: app.py:864
 msgid "SGF Analyzer"
 msgstr "SGFアナライザー"
 
-#: app.py:893 app.py:957
+#: app.py:922 app.py:986
 msgid "Select SGF file"
 msgstr "SGFファイルを選択"
 
-#: app.py:894
+#: app.py:923
 msgid "Select position"
 msgstr "局面を選択"
 
-#: app.py:895
+#: app.py:924
 msgid "Select moves"
 msgstr "手を選択"
 
-#: app.py:896
+#: app.py:925
 msgid "Analysis settings"
 msgstr "解析設定"
 
-#: app.py:897
+#: app.py:926
 msgid "Confirm settings"
 msgstr "設定を確認"
 
-#: app.py:898
+#: app.py:927
 msgid "Analyzing..."
 msgstr "解析中..."
 
-#: app.py:921
+#: app.py:950
 msgid "< &Back"
 msgstr "< 戻る(&B)"
 
-#: app.py:924 app.py:1386
+#: app.py:953 app.py:1416
 msgid "&Next >"
 msgstr "次へ(&N) >"
 
-#: app.py:929
+#: app.py:958
 msgid "&Cancel"
 msgstr "キャンセル(&C)"
 
-#: app.py:951
+#: app.py:980
 msgid "Select SGF file to analyze"
 msgstr "解析するSGFファイルを選択してください"
 
-#: app.py:958
+#: app.py:987
 msgid "SGF Files (*.sgf)|*.sgf|All files|*.*"
 msgstr "SGFファイル (*.sgf)|*.sgf|すべてのファイル|*.*"
 
-#: app.py:971
+#: app.py:1000
 msgid "Select position to analyze"
 msgstr "解析する局面を選択してください"
 
-#: app.py:1012
+#: app.py:1041
 msgid "Select moves to compare"
 msgstr "比較する手を選択してください"
 
-#: app.py:1087 app.py:1096
+#: app.py:1116 app.py:1125
 msgid "Select KataGo executable"
 msgstr "KataGo実行ファイルを選択"
 
-#: app.py:1091
+#: app.py:1120
 msgid "Executable (*.exe)|*.exe|All files|*"
 msgstr "実行ファイル (*.exe)|*.exe|すべてのファイル|*"
 
-#: app.py:1093
+#: app.py:1122
 msgid "All files|*"
 msgstr "すべてのファイル|*"
 
-#: app.py:1104
+#: app.py:1133
 msgid "Select KataGo configuration (leave blank for default settings)"
 msgstr "KataGo の設定を選択してください（空欄のままにすると既定設定にします）"
 
-#: app.py:1110
+#: app.py:1139
 msgid "Select KataGo configuration file"
 msgstr "KataGoの設定ファイルを選択"
 
-#: app.py:1111
+#: app.py:1140
 msgid "KataGo configuration (*.cfg)|*.cfg|All files|*"
 msgstr "KataGo設定 (*.cfg)|*.cfg|すべてのファイル|*"
 
-#: app.py:1116 app.py:1121
+#: app.py:1145 app.py:1150
 msgid "Select KataGo model"
 msgstr "KataGoモデルを選択"
 
-#: app.py:1122
+#: app.py:1151
 msgid "KataGo model (*.bin.gz;*.bin)|*.bin.gz;*.bin|All files|*.*"
 msgstr "KataGoモデル (*.bin.gz;*.bin)|*.bin.gz;*.bin|すべてのファイル|*.*"
 
-#: app.py:1129
+#: app.py:1158
 msgid "Minimum weight"
 msgstr "最小重み"
 
-#: app.py:1137
+#: app.py:1166
 msgid "Maximum radius"
 msgstr "最大半径"
 
-#: app.py:1147
-msgid "Assumed komi (leave blank to calculate automatically; recommended)"
-msgstr "想定コミ（空欄のままにすると自動計算します。推奨）"
+#: app.py:1176
+msgid "Assumed komi (leave blank to calculate automatically - recommended)"
+msgstr "想定コミ（空欄のままにすると自動計算します - 推奨）"
 
-#: app.py:1228
+#: app.py:1258
 msgid "Failed to load SGF file"
 msgstr "SGFファイルの読み込みに失敗しました"
 
-#: app.py:1228
+#: app.py:1258
 msgid "Error"
 msgstr "エラー"
 
-#: app.py:1271
+#: app.py:1301
 msgid "Automatic komi"
 msgstr "自動コミ"
 
-#: app.py:1273
+#: app.py:1303
 #, python-format
 msgid ""
 "SGF file\n"
@@ -287,44 +287,44 @@ msgstr ""
 "コミ\n"
 "\t%s"
 
-#: app.py:1351
+#: app.py:1381
 msgid "Analysis complete"
 msgstr "解析が完了しました"
 
-#: app.py:1367
+#: app.py:1397
 #, python-format
 msgid "Estimated time %s / %s"
 msgstr "予測時間 %s / %s"
 
-#: app.py:1382
+#: app.py:1412
 msgid "&Start"
 msgstr "開始(&S)"
 
-#: app.py:1384
+#: app.py:1414
 msgid "&Finish"
 msgstr "完了(&F)"
 
-#: app.py:1421
+#: app.py:1451
 msgid "Are you sure you want to cancel?"
 msgstr "キャンセルしてもよろしいですか？"
 
-#: app.py:1421
+#: app.py:1451
 msgid "Cancel"
 msgstr "キャンセル"
 
-#: app.py:1493
+#: app.py:1523
 msgid "Save analysis log?"
 msgstr "解析ログを保存しますか？"
 
-#: app.py:1493 app.py:1506
+#: app.py:1523 app.py:1536
 msgid "Save"
 msgstr "保存"
 
-#: app.py:1507
+#: app.py:1537
 msgid "Text files (*.txt)|*.txt|All files|*"
 msgstr "テキストファイル (*.txt)|*.txt|すべてのファイル|*"
 
-#: app.py:1543
+#: app.py:1573
 #, python-format
 msgid "Move %d"
 msgstr "第%d手"
