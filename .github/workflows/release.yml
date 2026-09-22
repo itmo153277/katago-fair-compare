@@ -1,0 +1,137 @@
+name: Build release artifacts
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to use for the draft release
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  PYTHON_VERSION: "3.14"
+
+jobs:
+  build-windows:
+    name: Build Windows installer
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install system dependencies
+        shell: pwsh
+        run: |
+          winget install --id JRSoftware.InnoSetup --exact --silent --accept-source-agreements --accept-package-agreements
+          winget install --id GnuWin32.Gettext --exact --silent --accept-source-agreements --accept-package-agreements
+          Add-Content $env:GITHUB_PATH "C:\Program Files (x86)\Inno Setup 6"
+          Add-Content $env:GITHUB_PATH "C:\Program Files (x86)\GnuWin32\bin"
+
+      - name: Install app dependencies
+        run: pip install -r requirements.txt pyinstaller
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          pyinstaller app.spec
+          iscc windows/katago-fair-compare-installer.iss
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          Move-Item windows/Output/katago-fair-compare.exe artifacts/
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v5
+        with:
+          name: windows
+          path: artifacts
+
+  build-linux:
+    name: Build Linux AppImage
+    runs-on: ubuntu-latest
+    container: ubuntu:22.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Install system dependencies
+        run: |
+          bash linux/install_deps.sh
+          echo /opt/pyenv/shims >> "$GITHUB_PATH"
+          echo /opt/linuxdeploy/bin >> "$GITHUB_PATH"
+
+      - name: Install app dependencies
+        run: pip install -r requirements.txt pyinstaller
+
+      - name: Build AppImage
+        run: |
+          pyinstaller app.spec
+          bash linux/create_appimage.sh
+          mkdir -p artifacts
+          mv dist/katago-fair-compare.AppImage artifacts/
+
+      - name: Upload AppImage
+        uses: actions/upload-artifact@v5
+        with:
+          name: linux
+          path: artifacts
+
+  build-macos:
+    name: Build macOS DMG
+    runs-on: macos-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install system dependencies
+        run: |
+          brew install gettext
+          brew link --force gettext
+
+      - name: Install app dependencies
+        run: pip install -r requirements.txt pyinstaller
+
+      - name: Build DMG
+        run: |
+          pyinstaller app.spec
+          bash macos/create_dmg.sh
+          mkdir -p artifacts
+          mv dist/katago-fair-compare.dmg artifacts/
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v5
+        with:
+          name: macos
+          path: artifacts
+
+  release:
+    name: Create draft release
+    needs: [build-windows, build-linux, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v5
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          draft: true
+          files: artifacts/*
