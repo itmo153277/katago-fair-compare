@@ -1,6 +1,6 @@
 
 #define MyAppName "KataGo Fair Compare"
-#define MyAppVersion "0.1"
+#define MyAppVersion "0.1.0"
 #define MyAppPublisher "viktprog@gmail.com"
 #define MyAppExeName "katago-fair-compare.exe"
 

@@ -83,6 +83,10 @@ elif IS_WINDOWS:
             pass
         elif bin[0].startswith("wx"):
             pass
+        elif bin[0].startswith("libffi"):
+            pass
+        elif bin[0] == "_ctypes.pyd":
+            pass
         else:
             continue
         binaries.append(bin)
@@ -112,6 +116,7 @@ exe = EXE(
     entitlements_file=None,
     icon=[icon],
     manifest="windows/manifest.xml" if IS_WINDOWS else None,
+    version="windows/version_info.txt" if IS_WINDOWS else None,
 )
 coll = COLLECT(
     exe,
