@@ -34,7 +34,9 @@ jobs:
         shell: pwsh
         run: |
           winget install --id JRSoftware.InnoSetup --exact --silent --accept-source-agreements --accept-package-agreements
-          winget install --id GnuWin32.Gettext --exact --silent --accept-source-agreements --accept-package-agreements
+
+          winget install --id GnuWin32.GetText --exact --silent --accept-source-agreements --accept-package-agreements
+
           Add-Content $env:GITHUB_PATH "C:\Program Files (x86)\Inno Setup 6"
           Add-Content $env:GITHUB_PATH "C:\Program Files (x86)\GnuWin32\bin"
 
@@ -50,7 +52,7 @@ jobs:
           Move-Item windows/Output/katago-fair-compare.exe artifacts/
 
       - name: Upload installer
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: windows
           path: artifacts
@@ -80,7 +82,7 @@ jobs:
           mv dist/katago-fair-compare.AppImage artifacts/
 
       - name: Upload AppImage
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: linux
           path: artifacts
@@ -97,11 +99,6 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install system dependencies
-        run: |
-          brew install gettext
-          brew link --force gettext
-
       - name: Install app dependencies
         run: pip install -r requirements.txt pyinstaller
 
@@ -113,7 +110,7 @@ jobs:
           mv dist/katago-fair-compare.dmg artifacts/
 
       - name: Upload DMG
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: macos
           path: artifacts
